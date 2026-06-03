@@ -28,6 +28,15 @@ from ...application.use_cases.apply_nat import (
     apply_nat_uc,
     remove_nat_uc,
 )
+from ...application.use_cases.apply_features import (
+    apply_svi_uc,
+    configure_etherchannel_uc,
+    apply_port_security_uc,
+    apply_hsrp_uc,
+    add_static_routes_uc,
+    apply_dhcp_relay_uc,
+    apply_ipv6_uc,
+)
 from ...infrastructure.generator.ptbuilder_generator import (
     generate_ptbuilder_script,
     generate_full_script,
@@ -1932,3 +1941,297 @@ def register_tools(mcp: FastMCP) -> None:
             "warnings": result.get("warnings", []),
             "dry_run": result["dry_run"],
         }, indent=2, ensure_ascii=False)
+
+    # ------------------------------------------------------------------
+    # SWITCHING / ROUTING FEATURES (apply to existing devices via bridge)
+    # ------------------------------------------------------------------
+
+    def _model_of(device_name: str) -> str:
+        for d in (_query_pt_devices() or []):
+            if d.get("name") == device_name:
+                return d.get("model", "") or ""
+        return ""
+
+    def _needs_trunk_encapsulation(model: str) -> bool:
+        # 3560/3650 multilayer switches require 'switchport trunk encapsulation
+        # dot1q'; 2960 is dot1q-only and rejects it.
+        return any(m in (model or "") for m in ("3560", "3650"))
+
+    def _feature_response(label: str, ident: str, device: str, result: dict, dry_run: bool, bridge_ok: bool) -> str:
+        summary = _apply_summary(label, ident, device, result, dry_run, bridge_ok)
+        return json.dumps({
+            "summary": "\n".join(summary),
+            "cli_lines": result.get("cli_lines"),
+            "js_payload": result.get("js_payload"),
+            "sent": result.get("sent"),
+            "applied": result.get("applied"),
+            "dry_run": result.get("dry_run"),
+        }, indent=2, ensure_ascii=False)
+
+    @mcp.tool()
+    def pt_apply_svi(
+        switch: str,
+        vlans: list[dict],
+        enable_routing: bool = True,
+        dry_run: bool = False,
+    ) -> str:
+        """
+        Configure inter-VLAN routing on a multilayer (L3) switch using SVIs.
+
+        The modern alternative to router-on-a-stick: instead of a router with
+        dot1Q subinterfaces, a 3560/3650 switch routes between VLANs with
+        switched virtual interfaces. Requires a multilayer switch
+        (e.g. 3560-24PS or 3650-24PS); a 2960 is L2-only and will reject
+        'ip routing'.
+
+        Parameters:
+        - switch: device name in PT (e.g. "CORE-SW"). Use pt_query_topology.
+        - vlans: list of dicts, one per routed VLAN:
+            {"vlan_id": 10, "ip": "192.168.10.1", "mask": "255.255.255.0",
+             "name": "DATA" (optional)}
+          The ip is the SVI address = the default gateway for that VLAN.
+        - enable_routing: emit 'ip routing' (default True).
+        - dry_run: validate + return the CLI without sending.
+        """
+        bridge_ok = _ensure_bridge() and _bridge_pt_connected()
+        if bridge_ok:
+            _ensure_pt_patches()
+        confirm_fn = _bridge_send_and_wait if bridge_ok and not dry_run else None
+        try:
+            result = apply_svi_uc(switch, vlans, enable_routing=enable_routing,
+                                  confirm_send=confirm_fn, dry_run=dry_run)
+        except (ValueError, KeyError, TypeError) as exc:
+            return json.dumps({"error": f"Invalid SVI input: {exc}"}, indent=2, ensure_ascii=False)
+        return _feature_response("SVI inter-VLAN routing", switch, switch, result, dry_run, bridge_ok)
+
+    @mcp.tool()
+    def pt_configure_etherchannel(
+        device_a: str,
+        ports_a: list[str],
+        device_b: str,
+        ports_b: list[str],
+        channel_id: int,
+        mode: str = "active",
+        layer: str = "l2",
+        trunk: bool = True,
+        allowed_vlans: list[int] | None = None,
+        access_vlan: int | None = None,
+        dry_run: bool = False,
+    ) -> str:
+        """
+        Bundle parallel links between two devices into an EtherChannel.
+
+        Configures BOTH ends. The member ports get 'channel-group <id> mode
+        <mode>' and the logical 'interface Port-channel<id>' gets the L2/L3
+        config. 'switchport trunk encapsulation dot1q' is added automatically
+        for 3560/3650 switches and omitted for 2960.
+
+        Parameters:
+        - device_a / device_b: the two devices (use pt_query_topology).
+        - ports_a / ports_b: matching member interfaces on each end, e.g.
+            ["GigabitEthernet0/1", "GigabitEthernet0/2"].
+        - channel_id: port-channel number (1-48).
+        - mode: "active"/"passive" (LACP), "desirable"/"auto" (PAgP), "on" (static).
+          Both ends must be compatible (active+active/passive, on+on, etc.).
+        - layer: "l2" (switchport) or "l3" ('no switchport', add IP separately).
+        - trunk: for l2, True = trunk, False = access.
+        - allowed_vlans: l2 trunk only, e.g. [10, 20].
+        - access_vlan: l2 access only.
+        - dry_run: validate + return the CLI without sending.
+        """
+        bridge_ok = _ensure_bridge() and _bridge_pt_connected()
+        if bridge_ok:
+            _ensure_pt_patches()
+        confirm_fn = _bridge_send_and_wait if bridge_ok and not dry_run else None
+        try:
+            result = configure_etherchannel_uc(
+                device_a, ports_a, device_b, ports_b, channel_id, mode=mode, layer=layer,
+                trunk=trunk, allowed_vlans=allowed_vlans, access_vlan=access_vlan,
+                needs_encap_a=_needs_trunk_encapsulation(_model_of(device_a)) if bridge_ok else False,
+                needs_encap_b=_needs_trunk_encapsulation(_model_of(device_b)) if bridge_ok else False,
+                confirm_send=confirm_fn, dry_run=dry_run)
+        except (ValueError, KeyError, TypeError) as exc:
+            return json.dumps({"error": f"Invalid EtherChannel input: {exc}"}, indent=2, ensure_ascii=False)
+        summary = _apply_summary(f"EtherChannel Po{channel_id}", f"{device_a}<->{device_b}", device_a, result, dry_run, bridge_ok)
+        return json.dumps({
+            "summary": "\n".join(summary),
+            "device_a": result["device_a"],
+            "device_b": result["device_b"],
+            "applied": result.get("applied"),
+            "dry_run": result.get("dry_run"),
+        }, indent=2, ensure_ascii=False)
+
+    @mcp.tool()
+    def pt_apply_port_security(
+        switch: str,
+        interface: str,
+        max_mac: int = 1,
+        sticky: bool = True,
+        violation: str = "shutdown",
+        dry_run: bool = False,
+    ) -> str:
+        """
+        Enable switchport port-security on an access port.
+
+        Parameters:
+        - switch: device name in PT.
+        - interface: access port, e.g. "FastEthernet0/1".
+        - max_mac: max secure MAC addresses (default 1).
+        - sticky: learn addresses with 'mac-address sticky' (default True).
+        - violation: "shutdown" (err-disable), "restrict" (drop + log) or
+          "protect" (drop silently). Default "shutdown".
+        - dry_run: validate + return the CLI without sending.
+        """
+        bridge_ok = _ensure_bridge() and _bridge_pt_connected()
+        if bridge_ok:
+            _ensure_pt_patches()
+        confirm_fn = _bridge_send_and_wait if bridge_ok and not dry_run else None
+        try:
+            result = apply_port_security_uc(switch, interface, max_mac=max_mac, sticky=sticky,
+                                            violation=violation, confirm_send=confirm_fn, dry_run=dry_run)
+        except (ValueError, KeyError, TypeError) as exc:
+            return json.dumps({"error": f"Invalid port-security input: {exc}"}, indent=2, ensure_ascii=False)
+        return _feature_response("port-security", f"{switch}:{interface}", switch, result, dry_run, bridge_ok)
+
+    @mcp.tool()
+    def pt_apply_hsrp(
+        router: str,
+        interface: str,
+        group: int,
+        virtual_ip: str,
+        priority: int = 100,
+        preempt: bool = True,
+        version: int = 2,
+        dry_run: bool = False,
+    ) -> str:
+        """
+        Configure HSRP (first-hop redundancy) on a router/L3 interface.
+
+        Configure HSRP on BOTH routers of the pair (same group + virtual_ip);
+        give the intended active router a higher priority (e.g. 110 vs 100).
+
+        Parameters:
+        - router: device name in PT.
+        - interface: the interface facing the LAN, e.g. "GigabitEthernet0/0".
+        - group: HSRP group number (0-255 for v1, 0-4095 for v2).
+        - virtual_ip: the virtual gateway IP shared by the pair (the hosts'
+          default gateway).
+        - priority: 1-255, higher wins active (default 100).
+        - preempt: reclaim active when priority is higher (default True).
+        - version: HSRP version 1 or 2 (default 2).
+        - dry_run: validate + return the CLI without sending.
+        """
+        bridge_ok = _ensure_bridge() and _bridge_pt_connected()
+        if bridge_ok:
+            _ensure_pt_patches()
+        confirm_fn = _bridge_send_and_wait if bridge_ok and not dry_run else None
+        try:
+            result = apply_hsrp_uc(router, interface, group, virtual_ip, priority=priority,
+                                   preempt=preempt, version=version, confirm_send=confirm_fn, dry_run=dry_run)
+        except (ValueError, KeyError, TypeError) as exc:
+            return json.dumps({"error": f"Invalid HSRP input: {exc}"}, indent=2, ensure_ascii=False)
+        return _feature_response(f"HSRP group {group}", f"{router}:{interface}", router, result, dry_run, bridge_ok)
+
+    @mcp.tool()
+    def pt_add_static_route(
+        router: str,
+        destination: str,
+        mask: str,
+        next_hop: str,
+        admin_distance: int = 1,
+        dry_run: bool = False,
+    ) -> str:
+        """
+        Add a static route (or a default route) to a router.
+
+        For a DEFAULT route toward the WAN/Internet, use destination "0.0.0.0"
+        and mask "0.0.0.0" (gateway of last resort).
+
+        Parameters:
+        - router: device name in PT.
+        - destination: network address, e.g. "192.168.5.0" (or "0.0.0.0").
+        - mask: subnet mask, e.g. "255.255.255.0" (or "0.0.0.0").
+        - next_hop: next-hop IP, e.g. "10.0.0.2".
+        - admin_distance: AD (default 1). Use a higher value (e.g. 254) for a
+          floating/backup route.
+        - dry_run: validate + return the CLI without sending.
+        """
+        bridge_ok = _ensure_bridge() and _bridge_pt_connected()
+        if bridge_ok:
+            _ensure_pt_patches()
+        confirm_fn = _bridge_send_and_wait if bridge_ok and not dry_run else None
+        route = {"destination": destination, "mask": mask, "next_hop": next_hop, "admin_distance": admin_distance}
+        try:
+            result = add_static_routes_uc(router, [route], confirm_send=confirm_fn, dry_run=dry_run)
+        except (ValueError, KeyError, TypeError) as exc:
+            return json.dumps({"error": f"Invalid static-route input: {exc}"}, indent=2, ensure_ascii=False)
+        kind = "default route" if destination == "0.0.0.0" and mask == "0.0.0.0" else f"static route {destination}/{mask}"
+        return _feature_response(kind, router, router, result, dry_run, bridge_ok)
+
+    @mcp.tool()
+    def pt_apply_dhcp_relay(
+        device: str,
+        interface: str,
+        helper_addresses: list[str],
+        dry_run: bool = False,
+    ) -> str:
+        """
+        Configure DHCP relay (ip helper-address) on an interface.
+
+        Use when DHCP clients are on a different segment than the DHCP server:
+        the router forwards their broadcasts to the server unicast.
+
+        Parameters:
+        - device: router/L3 device name in PT.
+        - interface: the interface facing the DHCP CLIENTS (e.g. the LAN SVI or
+          subinterface), NOT the one facing the server.
+        - helper_addresses: one or more DHCP server IPs, e.g. ["192.168.0.10"].
+        - dry_run: validate + return the CLI without sending.
+        """
+        bridge_ok = _ensure_bridge() and _bridge_pt_connected()
+        if bridge_ok:
+            _ensure_pt_patches()
+        confirm_fn = _bridge_send_and_wait if bridge_ok and not dry_run else None
+        try:
+            result = apply_dhcp_relay_uc(device, interface, helper_addresses,
+                                         confirm_send=confirm_fn, dry_run=dry_run)
+        except (ValueError, KeyError, TypeError) as exc:
+            return json.dumps({"error": f"Invalid DHCP-relay input: {exc}"}, indent=2, ensure_ascii=False)
+        return _feature_response("DHCP relay", f"{device}:{interface}", device, result, dry_run, bridge_ok)
+
+    @mcp.tool()
+    def pt_apply_ipv6(
+        device: str,
+        interfaces: list[dict],
+        enable_routing: bool = True,
+        ospfv3: dict | None = None,
+        dry_run: bool = False,
+    ) -> str:
+        """
+        Apply IPv6 addressing (dual-stack) and optional OSPFv3 to a device.
+
+        IPv6 coexists with any existing IPv4 (dual-stack).
+
+        Parameters:
+        - device: device name in PT.
+        - interfaces: list of dicts, one per interface:
+            {"interface": "GigabitEthernet0/0",
+             "ipv6": "2001:db8:1::1/64",
+             "ospf_area": 0 (optional — only if you pass ospfv3)}
+        - enable_routing: emit 'ipv6 unicast-routing' (default True; needed on
+          routers/L3 switches that route IPv6).
+        - ospfv3: optional dict to enable OSPFv3:
+            {"process_id": 1, "router_id": "1.1.1.1" (optional)}
+          Interfaces that include "ospf_area" get 'ipv6 ospf <pid> area <area>'.
+        - dry_run: validate + return the CLI without sending.
+        """
+        bridge_ok = _ensure_bridge() and _bridge_pt_connected()
+        if bridge_ok:
+            _ensure_pt_patches()
+        confirm_fn = _bridge_send_and_wait if bridge_ok and not dry_run else None
+        try:
+            result = apply_ipv6_uc(device, interfaces, enable_routing=enable_routing,
+                                   ospfv3=ospfv3, confirm_send=confirm_fn, dry_run=dry_run)
+        except (ValueError, KeyError, TypeError) as exc:
+            return json.dumps({"error": f"Invalid IPv6 input: {exc}"}, indent=2, ensure_ascii=False)
+        return _feature_response("IPv6 dual-stack", device, device, result, dry_run, bridge_ok)
