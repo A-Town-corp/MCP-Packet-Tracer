@@ -1045,14 +1045,33 @@ def register_tools(mcp: FastMCP) -> None:
         Send a JS command to the bridge and wait for the response (long-poll GET /result).
         The command must call reportResult(...) internally to send data back.
         Requires the bridge to be active and PT connected.
+
+        The result channel has no per-request correlation, so we (1) drain any
+        orphaned result left by an earlier timed-out call before queueing, and
+        (2) long-poll up to the caller's full `timeout` - passing it to the
+        server (which honors ?timeout) and looping on 204 - so slow operations
+        no longer falsely time out and leave their result stranded.
         """
+        # Clear stale/orphaned results so we read OUR command's reply, not a
+        # previous call's late one.
+        _http_get(f"{_BRIDGE_URL}/drain", timeout=2.0)
         status_post, _ = _http_post(f"{_BRIDGE_URL}/queue", js_call)
         if status_post != 200:
             return None
-        status_get, body = _http_get(f"{_BRIDGE_URL}/result", timeout=timeout)
-        if status_get == 200:
-            return body
-        return None
+        deadline = time.monotonic() + max(0.1, timeout)
+        while True:
+            remaining = deadline - time.monotonic()
+            if remaining <= 0:
+                return None
+            wait = min(remaining, 28.0)
+            status_get, body = _http_get(
+                f"{_BRIDGE_URL}/result?timeout={wait:.1f}", timeout=wait + 3.0)
+            if status_get == 200:
+                return body
+            if status_get == 204:
+                continue  # server long-poll expired with no result; keep waiting
+            # transient network error - brief backoff, then retry within deadline
+            time.sleep(0.1)
 
     def _check_bridge() -> str | None:
         """Check bridge+PT connectivity. Returns error message or None if OK.

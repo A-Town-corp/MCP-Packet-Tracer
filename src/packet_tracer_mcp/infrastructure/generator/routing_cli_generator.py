@@ -30,9 +30,9 @@ def generate_ospf_cli(
         A list of IOS body lines. Sub-commands use a single leading space and
         the block is terminated with " exit".
     """
-    if not isinstance(process_id, int) or process_id < 1:
+    if not isinstance(process_id, int) or process_id < 1 or process_id > 65535:
         raise ValueError(
-            f"process_id must be a positive integer, got {process_id!r}"
+            f"process_id must be an integer in 1-65535, got {process_id!r}"
         )
     if not networks:
         raise ValueError("networks must be a non-empty list")
@@ -44,7 +44,7 @@ def generate_ospf_cli(
                 )
 
     lines: list[str] = [f"router ospf {process_id}"]
-    if router_id is not None:
+    if router_id and str(router_id).strip():
         lines.append(f" router-id {router_id}")
     for entry in networks:
         lines.append(
@@ -129,7 +129,7 @@ def generate_eigrp_cli(
         raise ValueError("networks must be a non-empty list")
 
     lines: list[str] = [f"router eigrp {as_number}"]
-    if router_id is not None:
+    if router_id and str(router_id).strip():
         lines.append(f" eigrp router-id {router_id}")
     for entry in networks:
         if isinstance(entry, dict):
@@ -177,7 +177,7 @@ def generate_bgp_cli(
         )
 
     lines: list[str] = [f"router bgp {as_number}"]
-    if router_id is not None:
+    if router_id and str(router_id).strip():
         lines.append(f" bgp router-id {router_id}")
     for nbr in neighbors or []:
         lines.append(f" neighbor {nbr['ip']} remote-as {nbr['remote_as']}")

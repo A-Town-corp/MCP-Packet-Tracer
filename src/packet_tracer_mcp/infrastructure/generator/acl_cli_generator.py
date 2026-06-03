@@ -97,7 +97,13 @@ def build_remove_payload(router: str, name_or_number: str, binding_interface: st
     if name_or_number.strip().isdigit():
         lines.append(f"no access-list {name_or_number}")
     else:
-        lines.append(f"no ip access-list {acl_type} {name_or_number}")
+        # A named ACL lives in a type-scoped namespace and the `no ip access-list
+        # <type> NAME` form must name the EXISTING type. The removal path can't
+        # know whether the caller created it standard or extended, so emit both;
+        # the one that doesn't match is a harmless no-op in IOS/PT. (acl_type is
+        # kept for signature compatibility but no longer trusted as a guess.)
+        lines.append(f"no ip access-list standard {name_or_number}")
+        lines.append(f"no ip access-list extended {name_or_number}")
     lines.append("end")
     lines.append("write memory")
     return "\n".join(lines)

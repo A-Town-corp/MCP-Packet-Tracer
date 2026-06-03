@@ -34,6 +34,17 @@ def generate_hsrp_cli(
         A list of IOS body lines. Sub-commands inside the interface block use
         a single leading space and the block is terminated with " exit".
     """
+    if not interface or not str(interface).strip():
+        raise ValueError("interface is required")
+    if not virtual_ip or not str(virtual_ip).strip():
+        raise ValueError("virtual_ip is required")
+    if not isinstance(group, int) or not (0 <= group <= 4095):
+        raise ValueError(f"group must be an integer in 0-4095, got {group!r}")
+    if not isinstance(priority, int) or not (0 <= priority <= 255):
+        raise ValueError(f"priority must be an integer in 0-255, got {priority!r}")
+    if version not in (1, 2):
+        raise ValueError(f"version must be 1 or 2, got {version!r}")
+
     lines: list[str] = [f"interface {interface}"]
     lines.append(f" standby version {version}")
     lines.append(f" standby {group} ip {virtual_ip}")

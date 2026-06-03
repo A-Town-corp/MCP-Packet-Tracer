@@ -108,5 +108,11 @@ class TestSVIGenerator:
         assert lines == ["ip routing"]
 
     def test_empty_vlans_without_routing(self):
-        lines = generate_svi_cli([], enable_routing=False)
-        assert lines == []
+        # A call that would configure nothing (no VLANs, no routing) is a footgun:
+        # it used to return [] and report applied=true. It now fails fast.
+        import pytest
+        with pytest.raises(ValueError):
+            generate_svi_cli([], enable_routing=False)
+
+    def test_empty_vlans_with_routing_ok(self):
+        assert generate_svi_cli([], enable_routing=True) == ["ip routing"]

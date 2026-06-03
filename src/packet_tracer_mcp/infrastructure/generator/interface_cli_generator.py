@@ -118,6 +118,10 @@ def generate_serial_cli(
         raise ValueError(
             f"ppp_auth must be one of {sorted(_VALID_PPP_AUTH)}, got {ppp_auth!r}"
         )
+    # 'ppp authentication' is only valid under 'encapsulation ppp'; reject the
+    # combination instead of emitting a line IOS rejects.
+    if ppp_auth is not None and encapsulation != "ppp":
+        raise ValueError("ppp_auth requires encapsulation='ppp'")
 
     lines: list[str] = []
 

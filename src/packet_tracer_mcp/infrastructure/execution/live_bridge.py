@@ -16,6 +16,7 @@ import time
 import json
 from http.server import ThreadingHTTPServer
 from queue import Queue, Empty
+from urllib.parse import urlparse, parse_qs
 
 
 class PTCommandBridge:
@@ -51,10 +52,31 @@ class PTCommandBridge:
                     ago = time.time() - bridge._last_poll_time
                     connected = bridge._last_poll_time > 0 and ago < 5.0
                     self._respond(200, json.dumps({"connected": connected, "last_poll_ago": round(ago, 1)}))
-                elif self.path == "/result":
-                    # Long-poll: block until PT posts a result (or timeout)
+                elif self.path == "/drain":
+                    # Drain any orphaned/stale results so a caller can avoid
+                    # popping a previous timed-out command's late result.
+                    n = 0
+                    while True:
+                        try:
+                            bridge._results.get_nowait()
+                            n += 1
+                        except Empty:
+                            break
+                    self._respond(200, json.dumps({"drained": n}))
+                elif self.path.startswith("/result"):
+                    # Long-poll: block until PT posts a result (or timeout). The
+                    # caller may request a longer wait via ?timeout=N (capped),
+                    # so operations slower than the old fixed 9s no longer falsely
+                    # time out and orphan their result.
+                    wait = 9.0
+                    if "?" in self.path:
+                        try:
+                            q = parse_qs(urlparse(self.path).query)
+                            wait = min(float(q.get("timeout", ["9"])[0]), 30.0)
+                        except Exception:
+                            wait = 9.0
                     try:
-                        result = bridge._results.get(timeout=9.0)
+                        result = bridge._results.get(timeout=max(0.1, wait))
                         self._respond(200, result)
                     except Empty:
                         self._respond(204, "")

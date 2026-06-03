@@ -49,9 +49,22 @@ def generate_stp_cli(
     for entry in vlan_root or []:
         vlan_id = entry["vlan"]
         if "priority" in entry:
-            lines.append(f"spanning-tree vlan {vlan_id} priority {entry['priority']}")
+            p = entry["priority"]
+            if not isinstance(p, int) or p < 0 or p > 61440 or p % 4096 != 0:
+                raise ValueError(
+                    f"STP priority for vlan {vlan_id} must be a multiple of 4096 "
+                    f"in 0-61440, got {p!r}")
+            lines.append(f"spanning-tree vlan {vlan_id} priority {p}")
         elif "role" in entry:
-            lines.append(f"spanning-tree vlan {vlan_id} root {entry['role']}")
+            role = entry["role"]
+            if role not in ("primary", "secondary"):
+                raise ValueError(
+                    f"STP root role for vlan {vlan_id} must be 'primary' or "
+                    f"'secondary', got {role!r}")
+            lines.append(f"spanning-tree vlan {vlan_id} root {role}")
+        else:
+            raise ValueError(
+                f"vlan_root entry for vlan {vlan_id} must specify 'role' or 'priority'")
 
     # --- global portfast / bpduguard defaults ---
     if portfast_default:

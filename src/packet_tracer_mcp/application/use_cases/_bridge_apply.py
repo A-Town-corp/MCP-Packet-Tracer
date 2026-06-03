@@ -75,7 +75,12 @@ def apply_ios(
     applied: bool | None = None
     if not dry_run and confirm_send is not None:
         res = confirm_send(js_payload)
-        sent = res is not None
+        # `sent` means "dispatched to the bridge", `applied` means "PT confirmed".
+        # A result-channel timeout (res is None) still means the command was
+        # queued and very likely applied, so report sent=True/applied=None
+        # (-> "sent but not confirmed; verify") instead of sent=False, which
+        # reads as "nothing happened" and invites a double-apply.
+        sent = True
         applied = parse_ok(res)
 
     return {

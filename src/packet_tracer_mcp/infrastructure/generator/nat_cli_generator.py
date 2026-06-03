@@ -40,10 +40,18 @@ def generate_nat_body_cli(config: NATConfig) -> list[str]:
             )
         return lines
 
-    # dynamic / pat -- generate the inline access-list if there are networks defined
+    # dynamic / pat -- generate the inline access-list if there are networks defined.
+    # A non-numeric acl_number is a NAMED ACL and must use the `ip access-list`
+    # block form; the flat `access-list NAME ...` form is invalid IOS.
     if config.inside_networks:
-        for net in config.inside_networks:
-            lines.append(f"access-list {config.acl_number} permit {net}")
+        if str(config.acl_number).strip().isdigit():
+            for net in config.inside_networks:
+                lines.append(f"access-list {config.acl_number} permit {net}")
+        else:
+            lines.append(f"ip access-list standard {config.acl_number}")
+            for net in config.inside_networks:
+                lines.append(f" permit {net}")
+            lines.append(" exit")
 
     if config.mode == "dynamic":
         # pool is required for dynamic NAT; if missing, validate_nat_config emits
@@ -103,6 +111,17 @@ def build_nat_configure_payload(config: NATConfig) -> str:
     return "\n".join(lines)
 
 
+def _no_acl_lines(acl_number: str) -> list[str]:
+    """Removal command(s) for the NAT ACL: numbered -> `no access-list N`;
+    named -> both `no ip access-list standard|extended NAME` (type-agnostic)."""
+    if str(acl_number).strip().isdigit():
+        return [f"no access-list {acl_number}"]
+    return [
+        f"no ip access-list standard {acl_number}",
+        f"no ip access-list extended {acl_number}",
+    ]
+
+
 def build_nat_remove_payload(
     router: str,
     mode: str,
@@ -137,19 +156,22 @@ def build_nat_remove_payload(
         if pool_name:
             lines.append(f"no ip nat inside source list {acl_number} pool {pool_name}")
             lines.append(f"no ip nat pool {pool_name}")
-        lines.append(f"no access-list {acl_number}")
+        lines.extend(_no_acl_lines(acl_number))
     elif mode == "pat":
+        # The removal path can't know whether PAT used the interface-overload form
+        # or a pool, so emit BOTH 'no' forms (the non-matching one no-ops) instead
+        # of guessing from an often-empty pool_name and leaving the real
+        # translation in place.
+        lines.append(
+            f"no ip nat inside source list {acl_number} "
+            f"interface {outside_interface} overload"
+        )
         if pool_name:
             lines.append(
                 f"no ip nat inside source list {acl_number} pool {pool_name} overload"
             )
             lines.append(f"no ip nat pool {pool_name}")
-        else:
-            lines.append(
-                f"no ip nat inside source list {acl_number} "
-                f"interface {outside_interface} overload"
-            )
-        lines.append(f"no access-list {acl_number}")
+        lines.extend(_no_acl_lines(acl_number))
 
     lines.append("end")
     lines.append("write memory")

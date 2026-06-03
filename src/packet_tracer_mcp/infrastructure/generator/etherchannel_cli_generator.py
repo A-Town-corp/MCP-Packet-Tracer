@@ -44,6 +44,21 @@ def generate_etherchannel_cli(
         A list of IOS body lines. Sub-commands inside a block get a single
         leading space, and every block ends with " exit".
     """
+    # Normalize + validate so a typo (e.g. "L3") errors loudly through the tool's
+    # ValueError handler instead of silently falling through to an L2 trunk.
+    layer = (layer or "").strip().lower()
+    if layer not in {"l2", "l3"}:
+        raise ValueError(f"invalid layer {layer!r}; expected 'l2' or 'l3'")
+    mode = (mode or "").strip().lower()
+    if mode not in {"active", "passive", "desirable", "auto", "on"}:
+        raise ValueError(
+            f"invalid mode {mode!r}; expected active/passive (LACP), "
+            f"desirable/auto (PAgP), or on (static)")
+    if not isinstance(channel_id, int) or not (1 <= channel_id <= 48):
+        raise ValueError(f"channel_id must be an integer in 1-48, got {channel_id!r}")
+    if not interfaces:
+        raise ValueError("interfaces must be a non-empty list")
+
     lines: list[str] = []
 
     # --- Member interfaces join the channel group ---

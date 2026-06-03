@@ -33,6 +33,9 @@ def generate_svi_cli(vlans: list[dict], enable_routing: bool = True) -> list[str
         block (`interface Vlan<id>` / ` ip address <ip> <mask>` /
         ` no shutdown` / ` exit`).
     """
+    if not vlans and not enable_routing:
+        raise ValueError("provide at least one VLAN (or enable_routing=True)")
+
     lines: list[str] = []
 
     if enable_routing:
