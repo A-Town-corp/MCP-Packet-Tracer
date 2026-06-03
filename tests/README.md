@@ -1,31 +1,31 @@
 # tests/
 
-Suite de pruebas con pytest. 38 tests cubriendo todas las capas del dominio.
+Test suite with pytest. 38 tests covering all layers of the domain.
 
-## Ejecución
+## Execution
 
 ```bash
-# Todos los tests
+# All tests
 python -m pytest tests/ -v
 
-# Un archivo específico
+# A specific file
 python -m pytest tests/test_full_build.py -v
 
-# Un test específico
+# A specific test
 python -m pytest tests/test_full_build.py::TestFullBuild::test_basic_2_routers -v
 ```
 
-## Archivos
+## Files
 
-| Archivo | Tests | Cobertura |
+| File | Tests | Coverage |
 |---------|-------|-----------|
-| `test_full_build.py` | 7 | **Integración**: 2 routers, 3 routers+WAN, OSPF, single router, sin DHCP, con servers, estimation fields |
-| `test_validator.py` | 4 | Validación: plan válido, nombre duplicado, modelo inválido, interfaz inválida |
+| `test_full_build.py` | 7 | **Integration**: 2 routers, 3 routers+WAN, OSPF, single router, without DHCP, with servers, estimation fields |
+| `test_validator.py` | 4 | Validation: valid plan, duplicate name, invalid model, invalid interface |
 | `test_generators.py` | 4 | PTBuilder: `addDevice` format, `addLink` format. CLI: hostname config, DHCP pool |
-| `test_auto_fixer.py` | 2 | Auto-corrección: fix cable type (router-router→cross), no-fix-needed |
-| `test_explainer.py` | 3 | Explicaciones: básica incluye routers, DHCP explained, WAN explained |
-| `test_ip_planner.py` | 6 | IP: subredes LAN /24, secuenciales, inter-router /30, hosts /30, gateway .1 |
-| `test_estimator.py` | 4 | Estimación: básica, WAN añade cloud, complejidad simple, complejidad escala |
-| `test_regressions_runtime.py` | 8 | Regresiones: templates, ManualExecutor metadata, rutas multi-hop, first IP .2, fix_plan, estimator con laptops/AP, PC config estática/DHCP |
+| `test_auto_fixer.py` | 2 | Auto-correction: fix cable type (router-router->cross), no-fix-needed |
+| `test_explainer.py` | 3 | Explanations: basic includes routers, DHCP explained, WAN explained |
+| `test_ip_planner.py` | 6 | IP: LAN /24 subnets, sequential, inter-router /30, /30 hosts, gateway .1 |
+| `test_estimator.py` | 4 | Estimation: basic, WAN adds cloud, simple complexity, complexity scales |
+| `test_regressions_runtime.py` | 8 | Regressions: templates, ManualExecutor metadata, multi-hop routes, first IP .2, fix_plan, estimator with laptops/AP, static/DHCP PC config |
 
-## Total: 38 tests, ~400 líneas de código
+## Total: 38 tests, ~400 lines of code

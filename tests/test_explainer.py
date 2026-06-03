@@ -1,8 +1,8 @@
-"""Tests para el Explainer."""
+"""Tests for the Explainer."""
 
-from src.packet_tracer_mcp.domain.models.requests import TopologyRequest
-from src.packet_tracer_mcp.domain.services.orchestrator import plan_from_request
-from src.packet_tracer_mcp.domain.services.explainer import explain_plan
+from packet_tracer_mcp.domain.models.requests import TopologyRequest
+from packet_tracer_mcp.domain.services.orchestrator import plan_from_request
+from packet_tracer_mcp.domain.services.explainer import explain_plan
 
 
 class TestExplainer:

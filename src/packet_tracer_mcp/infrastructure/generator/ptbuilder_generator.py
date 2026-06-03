@@ -1,8 +1,8 @@
 """
-Generador de scripts PTBuilder.
+PTBuilder script generator.
 
-Convierte un TopologyPlan validado en JavaScript compatible
-con la extensión PTBuilder de Packet Tracer.
+Converts a validated TopologyPlan into JavaScript compatible
+with the Packet Tracer PTBuilder extension.
 """
 
 from __future__ import annotations
@@ -11,7 +11,7 @@ from ...domain.models.plans import TopologyPlan
 
 
 def generate_ptbuilder_script(plan: TopologyPlan) -> str:
-    """Genera un script JS de PTBuilder a partir de un plan validado."""
+    """Generate a PTBuilder JS script from a validated plan."""
     lines: list[str] = []
 
     for dev in plan.devices:
@@ -31,8 +31,8 @@ def generate_ptbuilder_script(plan: TopologyPlan) -> str:
 
 def generate_executable_script(plan: TopologyPlan) -> str:
     """
-    Genera script JS completo y ejecutable: dispositivos, enlaces,
-    configureIosDevice() para routers/switches, y configurePcIp() para PCs.
+    Generate a complete, executable JS script: devices, links,
+    configureIosDevice() for routers/switches, and configurePcIp() for PCs.
     """
     from .cli_config_generator import generate_all_configs
 
@@ -65,8 +65,8 @@ def generate_executable_script(plan: TopologyPlan) -> str:
 
 def generate_full_script(plan: TopologyPlan) -> str:
     """
-    Genera el script completo: PTBuilder + bloque de configuración CLI
-    como comentarios (para referencia visual).
+    Generate the complete script: PTBuilder + CLI configuration block
+    as comments (for visual reference).
     """
     from .cli_config_generator import generate_all_configs
 
@@ -75,8 +75,8 @@ def generate_full_script(plan: TopologyPlan) -> str:
 
     configs = generate_all_configs(plan)
     if configs:
-        parts.append("/* === Configuraciones CLI por dispositivo ===")
-        parts.append("Copiar y pegar en la CLI de cada dispositivo. */")
+        parts.append("/* === CLI configurations per device ===")
+        parts.append("Copy and paste into the CLI of each device. */")
         for device_name, cli_block in configs.items():
             parts.append(f"/* --- {device_name} ---")
             for line in cli_block.splitlines():

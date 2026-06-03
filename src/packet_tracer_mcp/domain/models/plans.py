@@ -1,4 +1,4 @@
-"""Modelos de plan — el resultado validado y completo."""
+"""Plan models - the validated and complete result."""
 
 from __future__ import annotations
 from pydantic import BaseModel, Field, field_validator
@@ -7,7 +7,7 @@ from ...shared.enums import DeviceRole
 
 
 class DevicePlan(BaseModel):
-    """Un dispositivo concreto en el plan."""
+    """A concrete device in the plan."""
     name: str
     model: str
     category: str
@@ -19,23 +19,52 @@ class DevicePlan(BaseModel):
 
 
 class LinkPlan(BaseModel):
-    """Un enlace entre dos dispositivos."""
+    """A link between two devices.
+
+    For topologies with VLANs, the SWITCH port is configured according to `mode`:
+      - "access": the port is an access port in VLAN `access_vlan`.
+      - "trunk":  the port is a trunk (802.1Q) carrying `trunk_allowed`.
+    On links without a switch or without VLANs these fields are ignored.
+    """
     device_a: str
     port_a: str
     device_b: str
     port_b: str
     cable: str = "straight"
+    mode: str = "access"          # "access" | "trunk"
+    access_vlan: int = 0          # access VLAN (0 = default/unspecified)
+    trunk_allowed: list[int] = Field(default_factory=list)  # VLANs allowed on the trunk
+
+
+class VLAN(BaseModel):
+    """A VLAN defined on a switch (VLAN database)."""
+    switch: str
+    vlan_id: int
+    name: str = ""
+
+
+class Subinterface(BaseModel):
+    """dot1Q subinterface of a router (router-on-a-stick).
+
+    Each routed VLAN has its own subinterface `parent_port.vlan_id` with
+    `encapsulation dot1Q vlan_id` and the gateway IP for that VLAN.
+    """
+    router: str
+    parent_port: str   # e.g. "GigabitEthernet0/0"
+    vlan_id: int
+    ip: str
+    mask: str
 
 
 class ModulePlan(BaseModel):
-    """Un módulo de expansión a instalar en un dispositivo.
+    """An expansion module to install on a device.
 
-    `slot` se pasa tal cual al `addModule(device, slot, model)` de PTBuilder.
-    El formato depende del tipo de slot del dispositivo:
+    `slot` is passed as-is to PTBuilder's `addModule(device, slot, model)`.
+    The format depends on the device's slot type:
       - HWIC (1941/2901/2911): "0/0", "0/1", "0/2", "0/3"
-      - NM (2911):             "1" o "2"
-      - NIM (ISR4321/4331):    "0" o "1"
-      - Cloud-PT/Server:       "0".."6" según el slot disponible
+      - NM (2911):             "1" or "2"
+      - NIM (ISR4321/4331):    "0" or "1"
+      - Cloud-PT/Server:       "0".."6" depending on the available slot
     """
     device: str
     slot: str
@@ -44,16 +73,16 @@ class ModulePlan(BaseModel):
     @field_validator("slot", mode="before")
     @classmethod
     def _coerce_slot_to_str(cls, v):
-        # Aceptamos int (ej: 0) por retrocompatibilidad y los convertimos a "0".
+        # We accept int (e.g. 0) for backward compatibility and convert it to "0".
         if isinstance(v, bool):
-            raise ValueError("slot debe ser str o int, no bool")
+            raise ValueError("slot must be str or int, not bool")
         if isinstance(v, int):
             return str(v)
         return v
 
 
 class DHCPPool(BaseModel):
-    """Un pool DHCP en un router."""
+    """A DHCP pool on a router."""
     router: str
     pool_name: str
     network: str
@@ -65,7 +94,7 @@ class DHCPPool(BaseModel):
 
 
 class StaticRoute(BaseModel):
-    """Una ruta estática. admin_distance > 1 la convierte en ruta flotante."""
+    """A static route. admin_distance > 1 makes it a floating route."""
     router: str
     destination: str
     mask: str
@@ -74,7 +103,7 @@ class StaticRoute(BaseModel):
 
 
 class OSPFConfig(BaseModel):
-    """Configuración OSPF para un router."""
+    """OSPF configuration for a router."""
     router: str
     process_id: int = 1
     router_id: str = ""
@@ -82,7 +111,7 @@ class OSPFConfig(BaseModel):
 
 
 class RIPConfig(BaseModel):
-    """Configuración RIP v2 para un router."""
+    """RIP v2 configuration for a router."""
     router: str
     version: int = 2
     networks: list[str] = Field(default_factory=list)
@@ -90,7 +119,7 @@ class RIPConfig(BaseModel):
 
 
 class EIGRPConfig(BaseModel):
-    """Configuración EIGRP para un router."""
+    """EIGRP configuration for a router."""
     router: str
     as_number: int = 100
     networks: list[dict] = Field(default_factory=list)  # [{network, wildcard}]
@@ -98,7 +127,7 @@ class EIGRPConfig(BaseModel):
 
 
 class ValidationCheck(BaseModel):
-    """Una verificación a ejecutar post-deploy."""
+    """A check to run post-deploy."""
     check_type: str
     from_device: str
     to_target: str = ""
@@ -106,11 +135,13 @@ class ValidationCheck(BaseModel):
 
 
 class TopologyPlan(BaseModel):
-    """Plan completo, validado, listo para generar scripts."""
+    """Complete, validated plan, ready to generate scripts."""
     name: str = "topology"
     devices: list[DevicePlan] = Field(default_factory=list)
     modules: list[ModulePlan] = Field(default_factory=list)
     links: list[LinkPlan] = Field(default_factory=list)
+    vlans: list[VLAN] = Field(default_factory=list)
+    subinterfaces: list[Subinterface] = Field(default_factory=list)
     dhcp_pools: list[DHCPPool] = Field(default_factory=list)
     static_routes: list[StaticRoute] = Field(default_factory=list)
     ospf_configs: list[OSPFConfig] = Field(default_factory=list)

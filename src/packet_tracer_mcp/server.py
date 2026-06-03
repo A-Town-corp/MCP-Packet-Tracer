@@ -1,8 +1,8 @@
 """
-Servidor MCP para Packet Tracer.
+MCP server for Packet Tracer.
 
-Punto de entrada: crea el servidor, registra tools/resources, y arranca
-en streamable-http (:39000) o stdio según el flag --stdio.
+Entry point: creates the server, registers tools/resources, and starts
+in streamable-http (:39000) or stdio depending on the --stdio flag.
 """
 
 from __future__ import annotations
@@ -30,10 +30,10 @@ register_resources(mcp)
 
 
 def main():
-    """Arranca el servidor MCP.
+    """Start the MCP server.
 
-    Por defecto usa streamable-http en :39000.
-    Con --stdio usa transporte stdio (para debug o clientes legacy).
+    By default uses streamable-http on :39000.
+    With --stdio uses stdio transport (for debugging or legacy clients).
     """
     if "--stdio" in sys.argv:
         mcp.run(transport="stdio")

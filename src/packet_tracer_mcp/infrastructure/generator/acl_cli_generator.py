@@ -1,15 +1,15 @@
-"""Generador de CLI IOS para ACLs.
+"""IOS CLI generator for ACLs.
 
-Produce los comandos `access-list` y `ip access-group` que se aplican via
-`configureIosDevice` a través del bridge. La salida puede consumirse de
-dos formas:
+Produces the `access-list` and `ip access-group` commands that are applied via
+`configureIosDevice` through the bridge. The output can be consumed in
+two ways:
 
-  1. `generate_acl_cli(plan)` → list[str] de líneas IOS para revisión.
-  2. `build_configure_payload(plan, binding=None)` → string completo
-     ya formateado con \\n internos, listo para inyectar como segundo
-     argumento de configureIosDevice. Importante: este string DEBE
-     viajar dentro de un solo statement JS (sin \\n en el código JS),
-     porque executeCode() de PT strippea los \\n de código fuente JS.
+  1. `generate_acl_cli(plan)` -> list[str] of IOS lines for review.
+  2. `build_configure_payload(plan, binding=None)` -> a fully formatted
+     string with internal \\n, ready to inject as the second argument
+     of configureIosDevice. Important: this string MUST travel inside
+     a single JS statement (no \\n in the JS code), because PT's
+     executeCode() strips the \\n from JS source code.
 """
 
 from __future__ import annotations
@@ -17,21 +17,32 @@ from ...domain.models.acls import ACLPlan, ACLEntry, ACLBinding
 
 
 def generate_acl_cli(plan: ACLPlan) -> list[str]:
-    """Genera las líneas `access-list ...` para un ACLPlan.
+    """Generate the `access-list ...` lines for an ACLPlan.
 
-    No incluye `enable`, `configure terminal` ni `end`. Solo las líneas
-    intermedias que definen la ACL.
+    Does not include `enable`, `configure terminal` or `end`. Only the
+    intermediate lines that define the ACL.
     """
     lines: list[str] = []
-    for entry in plan.entries:
-        if entry.remark:
-            lines.append(f"access-list {plan.name_or_number} remark {entry.remark}")
-        lines.append(_render_entry(plan.name_or_number, plan.acl_type, entry))
+    is_named = not plan.name_or_number.strip().isdigit()
+    if is_named:
+        # Named ACL: `ip access-list standard|extended NAME` + indented entries.
+        # The flat `access-list NAME ...` form is INVALID IOS for non-numeric ids.
+        lines.append(f"ip access-list {plan.acl_type} {plan.name_or_number}")
+        for entry in plan.entries:
+            if entry.remark:
+                lines.append(f" remark {entry.remark}")
+            lines.append(" " + _render_entry(plan.name_or_number, plan.acl_type, entry, is_named=True))
+        lines.append("exit")
+    else:
+        for entry in plan.entries:
+            if entry.remark:
+                lines.append(f"access-list {plan.name_or_number} remark {entry.remark}")
+            lines.append(_render_entry(plan.name_or_number, plan.acl_type, entry, is_named=False))
     return lines
 
 
 def generate_acl_binding_cli(binding: ACLBinding) -> list[str]:
-    """Genera las líneas para aplicar una ACL a una interfaz.
+    """Generate the lines to apply an ACL to an interface.
 
     Output:
         interface <iface>
@@ -46,20 +57,20 @@ def generate_acl_binding_cli(binding: ACLBinding) -> list[str]:
 
 
 def build_configure_payload(plan: ACLPlan, binding: ACLBinding | None = None) -> str:
-    """Construye el string completo para configureIosDevice.
+    """Build the full string for configureIosDevice.
 
-    Estructura:
+    Structure:
         enable
         configure terminal
-        <líneas access-list>
+        <access-list lines>
         [interface ... / ip access-group ... / exit]
         end
         write memory
 
-    Las líneas se unen con `\\n` (newlines reales). Este string SE PASA
-    como argumento a configureIosDevice; los `\\n` aquí NO son los `\\n`
-    del código JS (esos los strippea executeCode), sino caracteres
-    dentro de un string que IOS interpreta como Enter.
+    The lines are joined with `\\n` (real newlines). This string IS PASSED
+    as an argument to configureIosDevice; the `\\n` here are NOT the `\\n`
+    of the JS code (those get stripped by executeCode), but characters
+    inside a string that IOS interprets as Enter.
     """
     lines: list[str] = ["enable", "configure terminal"]
     lines.extend(generate_acl_cli(plan))
@@ -70,32 +81,40 @@ def build_configure_payload(plan: ACLPlan, binding: ACLBinding | None = None) ->
     return "\n".join(lines)
 
 
-def build_remove_payload(router: str, name_or_number: str, binding_interface: str = "", direction: str = "in") -> str:
-    """Construye comandos para eliminar una ACL (y su binding si aplica)."""
+def build_remove_payload(router: str, name_or_number: str, binding_interface: str = "", direction: str = "in", acl_type: str = "extended") -> str:
+    """Build commands to remove an ACL (and its binding if applicable).
+
+    Numbered ACL -> `no access-list <num>`.
+    Named ACL    -> `no ip access-list <standard|extended> <name>` (the numbered
+                   form is invalid IOS for a non-numeric id). `acl_type` is
+                   required for the named case since it can't be inferred.
+    """
     lines: list[str] = ["enable", "configure terminal"]
     if binding_interface:
         lines.append(f"interface {binding_interface}")
         lines.append(f" no ip access-group {name_or_number} {direction}")
         lines.append(" exit")
-    lines.append(f"no access-list {name_or_number}")
+    if name_or_number.strip().isdigit():
+        lines.append(f"no access-list {name_or_number}")
+    else:
+        lines.append(f"no ip access-list {acl_type} {name_or_number}")
     lines.append("end")
     lines.append("write memory")
     return "\n".join(lines)
 
 
 # ----------------------------------------------------------------------
-# Helpers privados
+# Private helpers
 # ----------------------------------------------------------------------
 
-def _render_entry(acl_id: str, acl_type: str, entry: ACLEntry) -> str:
-    """Renderiza una entrada como línea IOS."""
-    parts: list[str] = [f"access-list {acl_id}"]
+def _render_entry(acl_id: str, acl_type: str, entry: ACLEntry, is_named: bool = False) -> str:
+    """Render an entry as an IOS line.
 
-    if entry.sequence is not None:
-        # IOS standard: sequencias se manejan con `ip access-list` modo named.
-        # Para `access-list NN` tradicional el orden es implícito.
-        # Dejamos sequence como hint pero no lo emitimos en formato numerado.
-        pass
+    Numbered ACL -> `access-list <id> <action> ...`.
+    Named ACL    -> `<action> ...` (the `ip access-list <type> <name>` header
+                   and indentation are added by generate_acl_cli).
+    """
+    parts: list[str] = [] if is_named else [f"access-list {acl_id}"]
 
     parts.append(entry.action)
 

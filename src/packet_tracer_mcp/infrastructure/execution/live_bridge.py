@@ -58,6 +58,83 @@ class PTCommandBridge:
                         self._respond(200, result)
                     except Empty:
                         self._respond(204, "")
+                elif self.path == "/ui":
+                    # Diagnostic + bridge page. Tests $se availability and reports
+                    # back via POST /result so we can read it from outside.
+                    html = (
+                        "<!DOCTYPE html><html><head><title>MCP Bridge</title></head><body>"
+                        "<p id='s' style='font:11px sans-serif;color:#999;padding:4px'>MCP Bridge - testing...</p>"
+                        "<script>"
+                        f"var BASE='http://127.0.0.1:{bridge.port}';"
+                        # Report $se availability immediately on load
+                        "function report(msg){"
+                        "var r=new XMLHttpRequest();"
+                        "r.open('POST',BASE+'/result',true);"
+                        "r.setRequestHeader('Content-Type','text/plain');"
+                        "r.send(msg);"
+                        "document.getElementById('s').textContent='MCP Bridge: '+msg;"
+                        "}"
+                        "try{"
+                        "if(typeof $se==='function'){report('$se=OK');}"
+                        "else{report('$se=MISSING (type:'+typeof $se+')');}}"
+                        "catch(e){report('$se=ERROR:'+e);}"
+                        # Main polling loop
+                        "setInterval(function(){"
+                        "var x=new XMLHttpRequest();"
+                        "x.open('GET',BASE+'/next',true);"
+                        "x.onload=function(){if(x.status===200&&x.responseText){"
+                        "try{$se('runCode',x.responseText);}catch(e){report('runCode error:'+e);}"
+                        "}};"
+                        "x.onerror=function(){};"
+                        "x.send();"
+                        "},500);"
+                        "</script>"
+                        "</body></html>"
+                    )
+                    self.send_response(200)
+                    self.send_header("Content-Type", "text/html; charset=utf-8")
+                    self._cors_headers()
+                    self.end_headers()
+                    self.wfile.write(html.encode("utf-8"))
+                elif self.path == "/se-test":
+                    # Navigate PTBuilder's own webview here via window.webview.setUrl(...)
+                    # Tests whether $se persists after navigation (C++ WebChannel registration).
+                    html = (
+                        "<!DOCTYPE html><html><body>"
+                        "<p id='s' style='font:12px sans-serif;padding:8px'>Testing $se...</p>"
+                        "<script>"
+                        f"var BASE='http://127.0.0.1:{bridge.port}';"
+                        "function post(msg){"
+                        "  var r=new XMLHttpRequest();"
+                        "  r.open('POST',BASE+'/result',true);"
+                        "  r.setRequestHeader('Content-Type','text/plain');"
+                        "  r.send(msg);"
+                        "  document.getElementById('s').textContent=msg;"
+                        "}"
+                        "try{"
+                        "  if(typeof $se==='function'){"
+                        "    $se('runCode','addDevice(\"SE_TEST\",\"2911\",600,300)');"
+                        "    post('$se=OK');"
+                        "  } else {"
+                        "    post('$se=MISSING:'+typeof $se);"
+                        "  }"
+                        "} catch(e){ post('$se=ERROR:'+e); }"
+                        "setInterval(function(){"
+                        "  var x=new XMLHttpRequest();"
+                        "  x.open('GET',BASE+'/next',true);"
+                        "  x.onload=function(){if(x.status===200&&x.responseText){"
+                        "    try{$se('runCode',x.responseText);}catch(e){}"
+                        "  }};"
+                        "  x.onerror=function(){};"
+                        "  x.send();"
+                        "},500);"
+                        "</script></body></html>"
+                    )
+                    self.send_response(200)
+                    self.send_header("Content-Type", "text/html; charset=utf-8")
+                    self._cors_headers()
+                    self.end_headers()
+                    self.wfile.write(html.encode("utf-8"))
                 else:
                     self._respond(404, "")
 
@@ -139,32 +216,13 @@ class PTCommandBridge:
         """
         Generate the one-time bootstrap JavaScript for Builder Code Editor.
 
-        IMPORTANT: PTBuilder's executeCode() strips all newlines from code
-        before passing to the script engine. So this must work without newlines.
-        We avoid // comments (they'd eat everything after them on the same line).
+        Uses webViewManager.createWebView to load the bridge UI from our local
+        HTTP server. The new webview runs in QWebEngine (has XMLHttpRequest + $se)
+        and works on macOS where window.webview.evaluateJavaScriptAsync does not.
         """
-        # The inner JS gets injected into the webview via evaluateJavaScriptAsync.
-        # It runs inside QWebEngine (Chromium) and has full XMLHttpRequest support.
-        # When it gets a command, it calls $se('runCode', cmd) to execute in Script Engine.
-        inner_js = (
-            "setInterval(function(){"
-            "var x=new XMLHttpRequest();"
-            f"x.open('GET','http://127.0.0.1:{self.port}/next',true);"
-            "x.onload=function(){"
-            "if(x.status===200&&x.responseText){"
-            "$se('runCode',x.responseText)"
-            "}};"
-            "x.onerror=function(){};"
-            "x.send()"
-            "},500)"
-        )
-
-        # The outer JS runs in the Script Engine via runCode().
-        # It accesses the PTBuilder webview to inject the polling loop.
-        # Safe with newlines stripped since we use /* */ comments and semicolons.
         return (
             f'/* PT-MCP Bridge - paste in Builder Code Editor and click Run */\n'
-            f'window.webview.evaluateJavaScriptAsync("{inner_js}");\n'
+            f'webViewManager.createWebView("MCP Bridge","http://127.0.0.1:{self.port}/ui",220,60);\n'
         )
 
 

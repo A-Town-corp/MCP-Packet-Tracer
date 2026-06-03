@@ -1,58 +1,58 @@
 # adapters/mcp/
 
-Capa de protocolo MCP — registra las herramientas (tools) y recursos (resources) que el LLM puede invocar.
+MCP protocol layer - registers the tools and resources that the LLM can invoke.
 
-## Archivos
+## Files
 
 ### `tool_registry.py`
-**~1050 líneas** — Registro monolítico de los 22 MCP tools.
+**~1050 lines** - Monolithic registry of the 22 MCP tools.
 
-Función principal: `register_tools(mcp: FastMCP) → None`
+Main function: `register_tools(mcp: FastMCP) -> None`
 
-Cada tool se define como una función decorada con `@mcp.tool()` dentro de `register_tools()`.
+Each tool is defined as a function decorated with `@mcp.tool()` inside `register_tools()`.
 
-#### Tools registradas (22)
+#### Registered tools (22)
 
-| Grupo | Tool | Descripción |
+| Group | Tool | Description |
 |-------|------|-------------|
-| **Consulta** | `pt_list_devices` | Catálogo de dispositivos con puertos |
-| | `pt_list_templates` | Templates de topología disponibles |
-| | `pt_get_device_details` | Detalle de un modelo específico |
-| **Estimación** | `pt_estimate_plan` | Dry-run sin generar plan completo |
-| **Planificación** | `pt_plan_topology` | Genera plan completo → JSON |
-| **Validación** | `pt_validate_plan` | Errores/warnings tipados |
-| | `pt_fix_plan` | Auto-corrección + re-validación |
-| | `pt_explain_plan` | Explicación en lenguaje natural |
-| **Generación** | `pt_generate_script` | Script PTBuilder JS (± configs) |
-| | `pt_generate_configs` | CLI IOS por dispositivo |
-| **Pipeline** | `pt_full_build` | Plan + validar + generar + explicar + estimar |
-| **Despliegue** | `pt_deploy` | Clipboard + archivos + instrucciones |
-| | `pt_export` | Solo archivos a disco |
-| | `pt_live_deploy` | Despliegue directo vía HTTP bridge |
-| **Bridge** | `pt_bridge_status` | Verificar conexión con PT |
-| **Proyectos** | `pt_list_projects` | Listar topologías guardadas |
-| | `pt_load_project` | Cargar proyecto por nombre |
-| **Interacción** | `pt_query_topology` | Consultar dispositivos/links actuales en PT |
-| | `pt_delete_device` | Eliminar dispositivo |
-| | `pt_rename_device` | Renombrar dispositivo |
-| | `pt_move_device` | Mover dispositivo en canvas |
-| | `pt_delete_link` | Eliminar enlace |
-| | `pt_send_raw` | Enviar JS arbitrario al Script Engine |
+| **Query** | `pt_list_devices` | Catalog of devices with ports |
+| | `pt_list_templates` | Available topology templates |
+| | `pt_get_device_details` | Detail of a specific model |
+| **Estimation** | `pt_estimate_plan` | Dry-run without generating a complete plan |
+| **Planning** | `pt_plan_topology` | Generates a complete plan -> JSON |
+| **Validation** | `pt_validate_plan` | Typed errors/warnings |
+| | `pt_fix_plan` | Auto-correction + re-validation |
+| | `pt_explain_plan` | Natural-language explanation |
+| **Generation** | `pt_generate_script` | PTBuilder JS script (+/- configs) |
+| | `pt_generate_configs` | IOS CLI per device |
+| **Pipeline** | `pt_full_build` | Plan + validate + generate + explain + estimate |
+| **Deployment** | `pt_deploy` | Clipboard + files + instructions |
+| | `pt_export` | Files to disk only |
+| | `pt_live_deploy` | Direct deployment via HTTP bridge |
+| **Bridge** | `pt_bridge_status` | Verify connection with PT |
+| **Projects** | `pt_list_projects` | List saved topologies |
+| | `pt_load_project` | Load a project by name |
+| **Interaction** | `pt_query_topology` | Query current devices/links in PT |
+| | `pt_delete_device` | Delete a device |
+| | `pt_rename_device` | Rename a device |
+| | `pt_move_device` | Move a device on the canvas |
+| | `pt_delete_link` | Delete a link |
+| | `pt_send_raw` | Send arbitrary JS to the Script Engine |
 
-#### Helpers internos
-- `_http_get(url)` / `_http_post(url, data)` — Comunicación HTTP con el bridge
-- `_js_escape(s)` — Escape de strings para JS
-- `_bridge_is_up()` / `_bridge_pt_connected()` — Verificación de conectividad
+#### Internal helpers
+- `_http_get(url)` / `_http_post(url, data)` - HTTP communication with the bridge
+- `_js_escape(s)` - String escaping for JS
+- `_bridge_is_up()` / `_bridge_pt_connected()` - Connectivity verification
 
 ### `resource_registry.py`
-**~64 líneas** — Registro de 5 MCP resources estáticos.
+**~64 lines** - Registry of 5 static MCP resources.
 
-Función principal: `register_resources(mcp: FastMCP) → None`
+Main function: `register_resources(mcp: FastMCP) -> None`
 
-| Resource URI | Contenido |
+| Resource URI | Content |
 |-------------|-----------|
-| `pt://catalog/devices` | Catálogo completo de dispositivos con puertos |
-| `pt://catalog/cables` | Tipos de cable disponibles |
-| `pt://catalog/aliases` | Alias comunes → modelo real |
-| `pt://catalog/templates` | Templates con descripción, rangos, routing default |
-| `pt://capabilities` | Versión, features, límites del servidor |
+| `pt://catalog/devices` | Complete catalog of devices with ports |
+| `pt://catalog/cables` | Available cable types |
+| `pt://catalog/aliases` | Common aliases -> real model |
+| `pt://catalog/templates` | Templates with description, ranges, default routing |
+| `pt://capabilities` | Version, features, server limits |

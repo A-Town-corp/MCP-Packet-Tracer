@@ -1,4 +1,4 @@
-"""Tests unitarios para ACLs: modelos, validador, generator y use case."""
+"""Unit tests for ACLs: models, validator, generator and use case."""
 
 from __future__ import annotations
 import pytest
@@ -84,7 +84,7 @@ class TestACLValidator:
             router="R1", name_or_number="101", acl_type="extended",
             entries=[
                 ACLEntry(
-                    action="deny", protocol="ip",  # ip no soporta puertos
+                    action="deny", protocol="ip",  # ip does not support ports
                     source="any", destination="any",
                     dest_port_op="eq", dest_port=80,
                 ),
@@ -116,7 +116,7 @@ class TestACLValidator:
             ],
         )
         result = validate_acl_plan(plan)
-        # No errores pero sí warning
+        # No errors, but a warning is expected
         assert result.is_valid
         assert any(w.code == ErrorCode.ACL_UNREACHABLE_RULE for w in result.warnings)
 
@@ -232,7 +232,7 @@ class TestApplyACLUseCase:
         assert "access-list 101 permit ip any any" in result["js_payload"]
 
     def test_invalid_plan_does_not_send(self):
-        plan = build_acl_plan("R1", "101", "extended", [])  # vacía
+        plan = build_acl_plan("R1", "101", "extended", [])  # empty
         sent_calls = []
         result = apply_acl_uc(
             plan=plan,
@@ -286,9 +286,9 @@ class TestApplyACLUseCase:
         assert result["valid"]
         assert result["sent"]
         assert len(sent_payload) == 1
-        # JS payload viaja en una sola línea (sin \n REALES en el código JS)
+        # JS payload travels on a single line (no REAL \n in the JS code)
         assert "\n" not in sent_payload[0]
-        # Pero los \\n literales sí están dentro del string
+        # But the literal \\n sequences are inside the string
         assert "\\n" in sent_payload[0]
 
     def test_remove_acl_dry_run(self):
@@ -303,7 +303,7 @@ class TestApplyACLUseCase:
 
 
 # ----------------------------------------------------------------------
-# JS payload encoding (regresión: \n no debe ser literal de código)
+# JS payload encoding (regression: \n must not be a code literal)
 # ----------------------------------------------------------------------
 
 class TestJSPayloadEncoding:
@@ -319,9 +319,9 @@ class TestJSPayloadEncoding:
             ],
         )
         result = apply_acl_uc(plan=plan, dry_run=True)
-        # Crítico: ningún \n REAL en el string del payload — todo en una línea JS
+        # Critical: no REAL \n in the payload string -- everything on one JS line
         assert "\n" not in result["js_payload"]
-        # El string IOS dentro del primer arg tiene \\n escapado (literales)
+        # The IOS string inside the first arg has escaped \\n (literals)
         assert "enable\\nconfigure terminal\\n" in result["js_payload"]
 
     def test_router_name_with_quotes_is_escaped(self):
@@ -330,5 +330,5 @@ class TestJSPayloadEncoding:
             entries_dicts=[{"action": "permit", "source": "any", "destination": "any"}],
         )
         result = apply_acl_uc(plan=plan, dry_run=True)
-        # Las comillas dobles dentro del nombre se escapan
+        # The double quotes inside the name are escaped
         assert 'Device\\"with\\"quotes' in result["js_payload"]

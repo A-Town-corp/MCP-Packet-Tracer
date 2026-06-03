@@ -1,11 +1,11 @@
 """
-Catálogo de módulos de expansión para Packet Tracer.
+Expansion module catalog for Packet Tracer.
 
-Los módulos se instalan en slots de dispositivos para agregar puertos
-adicionales (serial, ethernet, wireless, etc.)
+Modules are installed in device slots to add additional ports
+(serial, ethernet, wireless, etc.)
 
-Cada módulo tiene un tipo numérico que PTBuilder usa internamente,
-y uno o más puertos que agrega al dispositivo.
+Each module has a numeric type that PTBuilder uses internally,
+and one or more ports that it adds to the device.
 """
 
 from __future__ import annotations
@@ -14,21 +14,21 @@ from dataclasses import dataclass
 
 @dataclass(frozen=True)
 class ModuleSpec:
-    """Especificación de un módulo de expansión."""
-    name: str           # Nombre del módulo (e.g. "HWIC-2T")
-    module_type: int    # Tipo numérico de PT
+    """Specification of an expansion module."""
+    name: str           # Module name (e.g. "HWIC-2T")
+    module_type: int    # Numeric PT type
     category: str       # router_nm, router_wic, switch_nm, etc.
-    ports_added: tuple[str, ...]  # Puertos que agrega (e.g. ("Serial0/0/0", "Serial0/0/1"))
+    ports_added: tuple[str, ...]  # Ports it adds (e.g. ("Serial0/0/0", "Serial0/0/1"))
     description: str = ""
-    compatible_with: tuple[str, ...] = ()  # pt_types compatibles (vacío = genérico)
+    compatible_with: tuple[str, ...] = ()  # compatible pt_types (empty = generic)
 
 
 # =====================================================================
-# Type 1 — Router NM Modules (Network Modules)
+# Type 1 -- Router NM Modules (Network Modules)
 # =====================================================================
-# Solo los routers ISR G1 / 2600 series y el genérico Router-PT aceptan NM.
-# Los ISR G2 (1941/2901/2911) NO tienen slot NM — solo HWIC + SM.
-# Para 4 seriales en un 2911, instala 2× HWIC-2T en slots "0/0" y "0/1".
+# Only ISR G1 / 2600 series routers and the generic Router-PT accept NM.
+# The ISR G2 (1941/2901/2911) do NOT have an NM slot -- only HWIC + SM.
+# For 4 serials on a 2911, install 2x HWIC-2T in slots "0/0" and "0/1".
 _NM_COMPATIBLE = ("Router-PT", "Router-PT-Empty", "2811", "2620XM", "2621XM")
 
 NM_1E = ModuleSpec(
@@ -82,7 +82,7 @@ NM_2W = ModuleSpec(
 NM_4A_S = ModuleSpec(
     name="NM-4A/S", module_type=1, category="router_nm",
     ports_added=("Serial1/0", "Serial1/1", "Serial1/2", "Serial1/3"),
-    description="4-port Async/Sync Serial — NOT supported on 2911 (use 2× HWIC-2T)",
+    description="4-port Async/Sync Serial -- NOT supported on 2911 (use 2x HWIC-2T)",
     compatible_with=_NM_COMPATIBLE,
 )
 NM_4E = ModuleSpec(
@@ -117,7 +117,7 @@ NM_ESW_161 = ModuleSpec(
 )
 
 # =====================================================================
-# Type 2 — Router HWIC / WIC / NIM Modules
+# Type 2 -- Router HWIC / WIC / NIM Modules
 # =====================================================================
 CELLULAR_1240 = ModuleSpec(
     name="1240-Cellular", module_type=2, category="router_hwic",
@@ -212,7 +212,7 @@ WIC_COVER = ModuleSpec(
 )
 
 # =====================================================================
-# Type 3 — PT Router NM (Generic Router modules)
+# Type 3 -- PT Router NM (Generic Router modules)
 # =====================================================================
 PT_ROUTER_NM_1AM = ModuleSpec(
     name="PT-ROUTER-NM-1AM", module_type=3, category="pt_router_nm",
@@ -261,7 +261,7 @@ PT_ROUTER_NM_COVER = ModuleSpec(
 )
 
 # =====================================================================
-# Type 4 — PT Switch NM + Power modules
+# Type 4 -- PT Switch NM + Power modules
 # =====================================================================
 AC_POWER_SUPPLY = ModuleSpec(
     name="AC-POWER-SUPPLY", module_type=4, category="pt_switch_nm",
@@ -305,7 +305,7 @@ PT_SWITCH_NM_COVER = ModuleSpec(
 )
 
 # =====================================================================
-# Type 5 — PT Cloud NM modules
+# Type 5 -- PT Cloud NM modules
 # =====================================================================
 PT_CLOUD_NM_1AM = ModuleSpec(
     name="PT-CLOUD-NM-1AM", module_type=5, category="pt_cloud_nm",
@@ -349,7 +349,7 @@ PT_CLOUD_NM_1S = ModuleSpec(
 )
 
 # =====================================================================
-# Type 6 — PT Repeater NM modules
+# Type 6 -- PT Repeater NM modules
 # =====================================================================
 PT_REPEATER_NM_1CE = ModuleSpec(
     name="PT-REPEATER-NM-1CE", module_type=6, category="pt_repeater_nm",
@@ -383,7 +383,7 @@ PT_REPEATER_NM_COVER = ModuleSpec(
 )
 
 # =====================================================================
-# Type 7 — PT Host NM modules (PC, Server, etc.)
+# Type 7 -- PT Host NM modules (PC, Server, etc.)
 # =====================================================================
 LINKSYS_WMP300N = ModuleSpec(
     name="Linksys-WMP300N", module_type=7, category="pt_host_nm",
@@ -447,7 +447,7 @@ PT_HOST_NM_COVER = ModuleSpec(
 )
 
 # =====================================================================
-# Type 8 — PT Modem NM modules
+# Type 8 -- PT Modem NM modules
 # =====================================================================
 PT_MODEM_NM_1CE = ModuleSpec(
     name="PT-MODEM-NM-1CE", module_type=8, category="pt_modem_nm",
@@ -466,7 +466,7 @@ PT_MODEM_NM_1CGE = ModuleSpec(
 )
 
 # =====================================================================
-# Type 9 — PT Laptop NM modules
+# Type 9 -- PT Laptop NM modules
 # =====================================================================
 LINKSYS_WPC300N_LAPTOP = ModuleSpec(
     name="Linksys-WPC300N", module_type=9, category="pt_laptop_nm",
@@ -525,7 +525,7 @@ PT_LAPTOP_NM_3G4G = ModuleSpec(
 )
 
 # =====================================================================
-# Type 10 — PT Cloud NM Coaxial (duplicate key in allModuleTypes)
+# Type 10 -- PT Cloud NM Coaxial (duplicate key in allModuleTypes)
 # =====================================================================
 PT_CLOUD_NM_1CX_TYPE10 = ModuleSpec(
     name="PT-CLOUD-NM-1CX", module_type=10, category="pt_cloud_nm",
@@ -534,7 +534,7 @@ PT_CLOUD_NM_1CX_TYPE10 = ModuleSpec(
 )
 
 # =====================================================================
-# Type 11 — IP Phone Power Adapter
+# Type 11 -- IP Phone Power Adapter
 # =====================================================================
 IP_PHONE_POWER_ADAPTER = ModuleSpec(
     name="IP_PHONE_POWER_ADAPTER", module_type=11, category="ip_phone",
@@ -543,7 +543,7 @@ IP_PHONE_POWER_ADAPTER = ModuleSpec(
 )
 
 # =====================================================================
-# Type 12 — PT TabletPC NM modules
+# Type 12 -- PT TabletPC NM modules
 # =====================================================================
 PT_TABLETPC_NM_1AM = ModuleSpec(
     name="PT-TABLETPC-NM-1AM", module_type=12, category="pt_tabletpc_nm",
@@ -597,7 +597,7 @@ PT_TABLETPC_NM_3G = ModuleSpec(
 )
 
 # =====================================================================
-# Type 13 — PT PDA/Smartphone NM modules
+# Type 13 -- PT PDA/Smartphone NM modules
 # =====================================================================
 PT_PDA_NM_1AM = ModuleSpec(
     name="PT-PDA-NM-1AM", module_type=13, category="pt_pda_nm",
@@ -651,7 +651,7 @@ PT_PDA_NM_3G4G = ModuleSpec(
 )
 
 # =====================================================================
-# Type 14 — PT Wireless End Device NM modules
+# Type 14 -- PT Wireless End Device NM modules
 # =====================================================================
 PT_WIRELESSEND_NM_1CE = ModuleSpec(
     name="PT-WIRELESSENDDEVICE-NM-1CE", module_type=14, category="pt_wirelessend_nm",
@@ -695,7 +695,7 @@ PT_WIRELESSEND_NM_1W_AC = ModuleSpec(
 )
 
 # =====================================================================
-# Type 15 — PT Wired End Device NM modules
+# Type 15 -- PT Wired End Device NM modules
 # =====================================================================
 PT_WIREDEND_NM_1CE = ModuleSpec(
     name="PT-WIREDENDDEVICE-NM-1CE", module_type=15, category="pt_wiredend_nm",
@@ -734,7 +734,7 @@ PT_WIREDEND_NM_1W_A = ModuleSpec(
 )
 
 # =====================================================================
-# Type 16 — PT Audio modules (Headphone, Microphone)
+# Type 16 -- PT Audio modules (Headphone, Microphone)
 # =====================================================================
 PT_HEADPHONE = ModuleSpec(
     name="PT-HEADPHONE", module_type=16, category="pt_audio",
@@ -748,7 +748,7 @@ PT_MICROPHONE = ModuleSpec(
 )
 
 # =====================================================================
-# Type 19 — ASA Cover
+# Type 19 -- ASA Cover
 # =====================================================================
 ASA_COVER = ModuleSpec(
     name="ASA-Cover", module_type=19, category="asa",
@@ -757,7 +757,7 @@ ASA_COVER = ModuleSpec(
 )
 
 # =====================================================================
-# Type 21 — Cell Tower NM modules
+# Type 21 -- Cell Tower NM modules
 # =====================================================================
 PT_CELL_NM_1CX = ModuleSpec(
     name="PT-CELL-NM-1CX", module_type=21, category="pt_cell_nm",
@@ -771,7 +771,7 @@ PT_CELL_NM_3G4G = ModuleSpec(
 )
 
 # =====================================================================
-# Type 22-23 — PT IoT NM modules
+# Type 22-23 -- PT IoT NM modules
 # =====================================================================
 PT_IOT_NM_1CE_T22 = ModuleSpec(
     name="PT-IOT-NM-1CE", module_type=22, category="pt_iot_nm",
@@ -806,7 +806,7 @@ PT_IOT_NM_3G4G_T23 = ModuleSpec(
 )
 
 # =====================================================================
-# Type 26-28 — IoT Custom I/O, Power adapters
+# Type 26-28 -- IoT Custom I/O, Power adapters
 # =====================================================================
 PT_IOT_CUSTOM_IO = ModuleSpec(
     name="PT-IOT-CUSTOM-IO", module_type=26, category="pt_iot_nm",
@@ -825,7 +825,7 @@ PT_UNV_PWR_ADAPTER = ModuleSpec(
 )
 
 # =====================================================================
-# Type 29 — Router Adapter
+# Type 29 -- Router Adapter
 # =====================================================================
 ROUTER_ADAPTER = ModuleSpec(
     name="ROUTER-ADAPTER", module_type=29, category="router_adapter",
@@ -834,7 +834,7 @@ ROUTER_ADAPTER = ModuleSpec(
 )
 
 # =====================================================================
-# Type 30 — SFP Modules (GLC)
+# Type 30 -- SFP Modules (GLC)
 # =====================================================================
 GLC_FE_100FX_RGD = ModuleSpec(
     name="GLC-FE-100FX-RGD", module_type=30, category="sfp",
@@ -863,7 +863,7 @@ GLC_TE = ModuleSpec(
 )
 
 # =====================================================================
-# Type 31 — Access Point Power Adapter
+# Type 31 -- Access Point Power Adapter
 # =====================================================================
 ACCESS_POINT_POWER_ADAPTER = ModuleSpec(
     name="ACCESS_POINT_POWER_ADAPTER", module_type=31, category="accesspoint",
@@ -872,7 +872,7 @@ ACCESS_POINT_POWER_ADAPTER = ModuleSpec(
 )
 
 # =====================================================================
-# Type 32 — Built-in modules (factory modules)
+# Type 32 -- Built-in modules (factory modules)
 # =====================================================================
 C3650_BUILTIN = ModuleSpec(
     name="C3650-BUILTIN", module_type=32, category="builtin",
@@ -905,7 +905,7 @@ PT_CONTROLLER_BUILTIN = ModuleSpec(
 )
 
 # =====================================================================
-# Type 34 — Meraki Power Adapter
+# Type 34 -- Meraki Power Adapter
 # =====================================================================
 MERAKI_POWER_ADAPTER = ModuleSpec(
     name="MERAKI-POWER-ADAPTER", module_type=34, category="meraki",
@@ -915,98 +915,98 @@ MERAKI_POWER_ADAPTER = ModuleSpec(
 
 
 # =====================================================================
-# CATÁLOGO INDEXADO
+# INDEXED CATALOG
 # =====================================================================
 ALL_MODULES: dict[str, ModuleSpec] = {
     m.name: m for m in [
-        # Type 1 — Router NM
+        # Type 1 -- Router NM
         NM_1E, NM_1E2W, NM_1FE_FX, NM_1FE_TX, NM_1FE2W,
         NM_2E2W, NM_2FE2W, NM_2W, NM_4A_S, NM_4E,
         NM_8A_S, NM_8AM, NM_COVER, NM_ESW_161,
-        # Type 2 — Router HWIC/WIC/NIM
+        # Type 2 -- Router HWIC/WIC/NIM
         CELLULAR_1240, COVER_1240,
         HWIC_1GE_SFP, HWIC_2T, HWIC_4ESW, HWIC_8A, HWIC_AP_AG_B,
         NIM_2T, NIM_COVER, NIM_ES2_4,
         WIC_1AM, WIC_1ENET, WIC_1T, WIC_2AM, WIC_2T, WIC_COVER,
-        # Type 3 — PT Router NM
+        # Type 3 -- PT Router NM
         PT_ROUTER_NM_1AM, PT_ROUTER_NM_1CE, PT_ROUTER_NM_1CFE,
         PT_ROUTER_NM_1CGE, PT_ROUTER_NM_1FFE, PT_ROUTER_NM_1FGE,
         PT_ROUTER_NM_1S, PT_ROUTER_NM_1SS, PT_ROUTER_NM_COVER,
-        # Type 4 — PT Switch NM + Power
+        # Type 4 -- PT Switch NM + Power
         AC_POWER_SUPPLY, POWER_COVER_PLATE,
         PT_SWITCH_NM_1CE, PT_SWITCH_NM_1CFE, PT_SWITCH_NM_1CGE,
         PT_SWITCH_NM_1FFE, PT_SWITCH_NM_1FGE, PT_SWITCH_NM_COVER,
-        # Type 5 — PT Cloud NM
+        # Type 5 -- PT Cloud NM
         PT_CLOUD_NM_1AM, PT_CLOUD_NM_1CE, PT_CLOUD_NM_1CFE,
         PT_CLOUD_NM_1CGE, PT_CLOUD_NM_1CX, PT_CLOUD_NM_1FFE,
         PT_CLOUD_NM_1FGE, PT_CLOUD_NM_1S,
-        # Type 6 — PT Repeater NM
+        # Type 6 -- PT Repeater NM
         PT_REPEATER_NM_1CE, PT_REPEATER_NM_1CFE, PT_REPEATER_NM_1CGE,
         PT_REPEATER_NM_1FFE, PT_REPEATER_NM_1FGE, PT_REPEATER_NM_COVER,
-        # Type 7 — PT Host NM
+        # Type 7 -- PT Host NM
         LINKSYS_WMP300N,
         PT_HOST_NM_1AM, PT_HOST_NM_1CE, PT_HOST_NM_1CFE,
         PT_HOST_NM_1CGE, PT_HOST_NM_1FFE, PT_HOST_NM_1FGE,
         PT_HOST_NM_1W, PT_HOST_NM_1W_A, PT_HOST_NM_1W_AC,
         PT_HOST_NM_3G4G, PT_HOST_NM_COVER,
-        # Type 8 — PT Modem NM
+        # Type 8 -- PT Modem NM
         PT_MODEM_NM_1CE, PT_MODEM_NM_1CFE, PT_MODEM_NM_1CGE,
-        # Type 9 — PT Laptop NM
+        # Type 9 -- PT Laptop NM
         LINKSYS_WPC300N_LAPTOP,
         PT_LAPTOP_NM_1AM, PT_LAPTOP_NM_1CE, PT_LAPTOP_NM_1CFE,
         PT_LAPTOP_NM_1CGE, PT_LAPTOP_NM_1FFE, PT_LAPTOP_NM_1FGE,
         PT_LAPTOP_NM_1W, PT_LAPTOP_NM_1W_A, PT_LAPTOP_NM_1W_AC,
         PT_LAPTOP_NM_3G4G,
-        # Type 10 — Cloud Coaxial
+        # Type 10 -- Cloud Coaxial
         PT_CLOUD_NM_1CX_TYPE10,
-        # Type 11 — IP Phone Power
+        # Type 11 -- IP Phone Power
         IP_PHONE_POWER_ADAPTER,
-        # Type 12 — Tablet NM
+        # Type 12 -- Tablet NM
         PT_TABLETPC_NM_1AM, PT_TABLETPC_NM_1CE, PT_TABLETPC_NM_1CFE,
         PT_TABLETPC_NM_1CGE, PT_TABLETPC_NM_1FFE, PT_TABLETPC_NM_1FGE,
         PT_TABLETPC_NM_1W, PT_TABLETPC_NM_1W_A, PT_TABLETPC_NM_1W_AC,
         PT_TABLETPC_NM_3G,
-        # Type 13 — PDA/Smartphone NM
+        # Type 13 -- PDA/Smartphone NM
         PT_PDA_NM_1AM, PT_PDA_NM_1CE, PT_PDA_NM_1CFE,
         PT_PDA_NM_1CGE, PT_PDA_NM_1FFE, PT_PDA_NM_1FGE,
         PT_PDA_NM_1W, PT_PDA_NM_1W_A, PT_PDA_NM_1W_AC,
         PT_PDA_NM_3G4G,
-        # Type 14 — Wireless End Device NM
+        # Type 14 -- Wireless End Device NM
         PT_WIRELESSEND_NM_1CE, PT_WIRELESSEND_NM_1CFE, PT_WIRELESSEND_NM_1CGE,
         PT_WIRELESSEND_NM_1FFE, PT_WIRELESSEND_NM_1FGE,
         PT_WIRELESSEND_NM_1W, PT_WIRELESSEND_NM_1W_A, PT_WIRELESSEND_NM_1W_AC,
-        # Type 15 — Wired End Device NM
+        # Type 15 -- Wired End Device NM
         PT_WIREDEND_NM_1CE, PT_WIREDEND_NM_1CFE, PT_WIREDEND_NM_1CGE,
         PT_WIREDEND_NM_1FFE, PT_WIREDEND_NM_1FGE,
         PT_WIREDEND_NM_1W, PT_WIREDEND_NM_1W_A,
-        # Type 16 — Audio
+        # Type 16 -- Audio
         PT_HEADPHONE, PT_MICROPHONE,
-        # Type 19 — ASA
+        # Type 19 -- ASA
         ASA_COVER,
-        # Type 21 — Cell Tower
+        # Type 21 -- Cell Tower
         PT_CELL_NM_1CX, PT_CELL_NM_3G4G,
-        # Type 22-23 — IoT
+        # Type 22-23 -- IoT
         PT_IOT_NM_1CE_T22, PT_IOT_NM_1CFE_T22, PT_IOT_NM_1CGE_T22, PT_IOT_NM_1W_T22,
         PT_IOT_NM_1W_AC_T23, PT_IOT_NM_3G4G_T23,
-        # Type 26-28 — IoT Custom/Power
+        # Type 26-28 -- IoT Custom/Power
         PT_IOT_CUSTOM_IO, PT_IOT_POWER_ADAPTER, PT_UNV_PWR_ADAPTER,
-        # Type 29 — Router Adapter
+        # Type 29 -- Router Adapter
         ROUTER_ADAPTER,
-        # Type 30 — SFP
+        # Type 30 -- SFP
         GLC_FE_100FX_RGD, GLC_GE_100FX, GLC_LH_SMD, GLC_T, GLC_TE,
-        # Type 31 — AP Power
+        # Type 31 -- AP Power
         ACCESS_POINT_POWER_ADAPTER,
-        # Type 32 — Built-in
+        # Type 32 -- Built-in
         C3650_BUILTIN, C3650_SFP_BUILTIN,
         ISR4321_BUILTIN, ISR4331_BUILTIN, PT_CONTROLLER_BUILTIN,
-        # Type 34 — Meraki Power
+        # Type 34 -- Meraki Power
         MERAKI_POWER_ADAPTER,
     ]
 }
 
-# Módulos más comunes por caso de uso
+# Most common modules by use case
 SERIAL_MODULES: dict[str, str] = {
-    # router pt_type → módulo que agrega serial
+    # router pt_type -> module that adds serial
     "1941":    "HWIC-2T",
     "2901":    "HWIC-2T",
     "2911":    "HWIC-2T",
@@ -1016,7 +1016,7 @@ SERIAL_MODULES: dict[str, str] = {
 
 
 def get_serial_module(router_model: str) -> ModuleSpec | None:
-    """Retorna el módulo serial apropiado para un modelo de router."""
+    """Return the appropriate serial module for a router model."""
     module_name = SERIAL_MODULES.get(router_model)
     if module_name:
         return ALL_MODULES.get(module_name)
@@ -1024,5 +1024,5 @@ def get_serial_module(router_model: str) -> ModuleSpec | None:
 
 
 def resolve_module(name: str) -> ModuleSpec | None:
-    """Resuelve un nombre de módulo."""
+    """Resolve a module name."""
     return ALL_MODULES.get(name) or ALL_MODULES.get(name.upper())

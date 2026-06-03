@@ -1,15 +1,15 @@
-"""Tests para el Auto-Fixer."""
+"""Tests for the Auto-Fixer."""
 
 import pytest
-from src.packet_tracer_mcp.domain.models.plans import (
+from packet_tracer_mcp.domain.models.plans import (
     TopologyPlan, DevicePlan, LinkPlan,
 )
-from src.packet_tracer_mcp.domain.services.auto_fixer import fix_plan
+from packet_tracer_mcp.domain.services.auto_fixer import fix_plan
 
 
 class TestAutoFixer:
     def test_fix_cable_type(self):
-        """Router↔Router debe usar cable cross, no straight."""
+        """Router-to-Router must use a cross cable, not straight."""
         plan = TopologyPlan(
             name="test",
             devices=[
@@ -28,10 +28,10 @@ class TestAutoFixer:
         fixed_plan, fixes = fix_plan(plan)
         assert len(fixes) >= 1
         assert fixed_plan.links[0].cable == "cross"
-        assert "Cable corregido" in fixes[0]
+        assert "Cable fixed" in fixes[0]
 
     def test_no_fix_needed(self):
-        """Un plan correcto no debe recibir fixes."""
+        """A correct plan must not receive any fixes."""
         plan = TopologyPlan(
             name="test",
             devices=[

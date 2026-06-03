@@ -1,4 +1,4 @@
-"""Modelos de request — lo que entra del LLM."""
+"""Request models - what comes in from the LLM."""
 
 from __future__ import annotations
 from pydantic import BaseModel, Field
@@ -11,7 +11,7 @@ from ...shared.constants import (
 
 
 class TopologyRequest(BaseModel):
-    """Petición de alto nivel — lo que el LLM genera a partir del usuario."""
+    """High-level request - what the LLM generates from the user."""
     template: TopologyTemplate = TopologyTemplate.MULTI_LAN
     routers: int = Field(ge=1, le=20, default=2)
     switches_per_router: int = Field(ge=0, le=4, default=1)
@@ -26,7 +26,9 @@ class TopologyRequest(BaseModel):
     switch_model: str = DEFAULT_SWITCH
     base_network: str = DEFAULT_LAN_BASE
     inter_router_network: str = DEFAULT_LINK_BASE
-    # Opciones avanzadas de routing
-    floating_routes: bool = False          # Genera rutas estáticas de respaldo (AD=254)
+    # Advanced routing options
+    floating_routes: bool = False          # Generates backup static routes (AD=254)
     ospf_process_id: int = Field(ge=1, le=65535, default=1)
     eigrp_as: int = Field(ge=1, le=65535, default=100)
+    # VLANs (router_on_a_stick template only). 0 = use the template default (2).
+    vlans: int = Field(ge=0, le=8, default=0)

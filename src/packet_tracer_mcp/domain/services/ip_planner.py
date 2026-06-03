@@ -1,8 +1,8 @@
 """
-Planificador de direccionamiento IP.
+IP addressing planner.
 
-Asigna subredes para LANs e inter-router links automáticamente,
-genera pools DHCP, rutas estáticas y configuraciones OSPF.
+Automatically assigns subnets for LANs and inter-router links, and
+generates DHCP pools, static routes, and OSPF configurations.
 """
 
 from __future__ import annotations
@@ -19,7 +19,7 @@ from ...shared.constants import DEFAULT_DNS
 
 
 class IPPlanner:
-    """Asigna IPs a todas las interfaces de un plan de topología."""
+    """Assign IPs to all interfaces of a topology plan."""
 
     def __init__(
         self,
@@ -44,7 +44,7 @@ class IPPlanner:
         ospf_process_id: int = 1,
         eigrp_as: int = 100,
     ) -> TopologyPlan:
-        """Asigna IPs, genera DHCP pools y rutas."""
+        """Assign IPs, generate DHCP pools and routes."""
         routers = plan.devices_by_category("router")
         router_lans: dict[str, list[ipaddress.IPv4Network]] = {}
         link_subnets: dict[tuple[str, str], ipaddress.IPv4Network] = {}
@@ -88,13 +88,16 @@ class IPPlanner:
                 for i, subnet in enumerate(router_lans.get(router.name, [])):
                     hosts = list(subnet.hosts())
                     gw = str(hosts[0])
+                    # Exclude the low range (.1-.10) for gateway + static IPs,
+                    # not just the gateway, to avoid leasing collisions.
+                    excl_end = str(hosts[min(9, len(hosts) - 1)])
                     plan.dhcp_pools.append(DHCPPool(
                         router=router.name,
                         pool_name=f"LAN_{router.name}_{i}",
                         network=str(subnet.network_address),
                         mask=str(subnet.netmask),
                         gateway=gw, dns=DEFAULT_DNS,
-                        excluded_start=gw, excluded_end=gw,
+                        excluded_start=gw, excluded_end=excl_end,
                     ))
 
         # Routing
@@ -142,7 +145,7 @@ class IPPlanner:
         router_lans: dict[str, list[ipaddress.IPv4Network]],
         link_subnets: dict[tuple[str, str], ipaddress.IPv4Network],
     ):
-        # Adyacencia entre routers basada en los links inter-router.
+        # Adjacency between routers based on the inter-router links.
         adjacency: dict[str, set[str]] = {r.name: set() for r in routers}
         for r1, r2 in link_subnets:
             adjacency.setdefault(r1, set()).add(r2)
@@ -217,7 +220,7 @@ class IPPlanner:
             ))
 
     def _plan_rip(self, plan: TopologyPlan, routers: list[DevicePlan]):
-        """Genera configuración RIP v2 para todos los routers."""
+        """Generate RIP v2 configuration for all routers."""
         for router in routers:
             classless_nets: list[str] = []
             for ip_cidr in router.interfaces.values():
@@ -233,7 +236,7 @@ class IPPlanner:
             ))
 
     def _plan_eigrp(self, plan: TopologyPlan, routers: list[DevicePlan], as_number: int = 100):
-        """Genera configuración EIGRP para todos los routers."""
+        """Generate EIGRP configuration for all routers."""
         for router in routers:
             networks = []
             for ip_cidr in router.interfaces.values():
@@ -259,8 +262,8 @@ class IPPlanner:
         admin_distance: int = 254,
     ):
         """
-        Genera rutas estáticas flotantes (backup) por caminos alternativos.
-        Solo produce rutas cuando existe un path alternativo al primario.
+        Generate floating (backup) static routes via alternate paths.
+        Only produces routes when an alternate path to the primary exists.
         """
         adjacency: dict[str, set[str]] = {r.name: set() for r in routers}
         for r1, r2 in link_subnets:

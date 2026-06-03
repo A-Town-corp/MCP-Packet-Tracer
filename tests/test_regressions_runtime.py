@@ -1,4 +1,4 @@
-"""Regresiones de runtime no cubiertas por los tests originales."""
+"""Runtime regressions not covered by the original tests."""
 
 from __future__ import annotations
 
@@ -6,14 +6,14 @@ import json
 import shutil
 from pathlib import Path
 
-from src.packet_tracer_mcp.application.use_cases.fix_plan import fix_plan_uc
-from src.packet_tracer_mcp.domain.models.plans import DevicePlan, LinkPlan, TopologyPlan
-from src.packet_tracer_mcp.domain.models.requests import TopologyRequest
-from src.packet_tracer_mcp.domain.services.orchestrator import plan_from_request
-from src.packet_tracer_mcp.infrastructure.catalog.templates import list_templates
-from src.packet_tracer_mcp.infrastructure.generator.cli_config_generator import generate_pc_config
-from src.packet_tracer_mcp.infrastructure.execution.manual_executor import ManualExecutor
-from src.packet_tracer_mcp.domain.services.estimator import estimate_from_request
+from packet_tracer_mcp.application.use_cases.fix_plan import fix_plan_uc
+from packet_tracer_mcp.domain.models.plans import DevicePlan, LinkPlan, TopologyPlan
+from packet_tracer_mcp.domain.models.requests import TopologyRequest
+from packet_tracer_mcp.domain.services.orchestrator import plan_from_request
+from packet_tracer_mcp.infrastructure.catalog.templates import list_templates
+from packet_tracer_mcp.infrastructure.generator.cli_config_generator import generate_pc_config
+from packet_tracer_mcp.infrastructure.execution.manual_executor import ManualExecutor
+from packet_tracer_mcp.domain.services.estimator import estimate_from_request
 
 
 def test_list_templates_returns_template_specs():
@@ -35,16 +35,16 @@ def test_manual_executor_respects_project_name_and_writes_metadata():
     output_dir.mkdir(parents=True, exist_ok=True)
 
     executor = ManualExecutor(output_dir=output_dir)
-    result = executor.execute(plan, project_name="mi proyecto")
+    result = executor.execute(plan, project_name="my project")
     assert result["status"] == "exported"
-    project_dir = output_dir / "mi_proyecto"
+    project_dir = output_dir / "my_project"
     assert project_dir.exists()
     assert (project_dir / "topology.js").exists()
     assert (project_dir / "full_build.js").exists()
     assert (project_dir / "plan.json").exists()
 
     metadata = json.loads((project_dir / "metadata.json").read_text(encoding="utf-8"))
-    assert metadata["project_name"] == "mi_proyecto"
+    assert metadata["project_name"] == "my_project"
     assert metadata["devices"] == len(plan.devices)
     assert metadata["links"] == len(plan.links)
 
@@ -109,7 +109,7 @@ def test_generate_pc_config_marks_static_hosts_as_static():
     )
 
     cfg = generate_pc_config(host, use_dhcp=False)
-    assert "Configurar IP estática" in cfg
+    assert "Configure a static IP" in cfg
     assert "DHCP" not in cfg.splitlines()[-1]
 
 
@@ -123,4 +123,4 @@ def test_generate_pc_config_marks_dhcp_hosts_as_dhcp():
     )
 
     cfg = generate_pc_config(host, use_dhcp=True)
-    assert "Configurar como DHCP" in cfg
+    assert "Configure as DHCP" in cfg

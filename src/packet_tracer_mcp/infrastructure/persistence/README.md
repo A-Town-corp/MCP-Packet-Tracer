@@ -1,40 +1,40 @@
 # infrastructure/persistence/
 
-Persistencia de proyectos — guardar, cargar y listar topologías en disco.
+Project persistence - save, load, and list topologies on disk.
 
-## Archivos
+## Files
 
-### `project_repository.py` — Repositorio de proyectos
+### `project_repository.py` - Project repository
 
-Gestiona la persistencia de planes y metadata en el sistema de archivos.
+Manages the persistence of plans and metadata on the filesystem.
 
 ```python
 class ProjectRepository:
     def __init__(base_dir="projects")
-    def save_plan(plan, project_name) → Path
-    def load_plan(project_name) → TopologyPlan
-    def list_projects() → list[dict]
-    def delete_project(project_name) → bool
+    def save_plan(plan, project_name) -> Path
+    def load_plan(project_name) -> TopologyPlan
+    def list_projects() -> list[dict]
+    def delete_project(project_name) -> bool
 ```
 
-**Estructura de un proyecto guardado:**
+**Structure of a saved project:**
 ```
 projects/
-└── mi_topologia/
-    ├── plan.json        ← TopologyPlan serializado (Pydantic JSON)
-    └── metadata.json    ← Metadata del proyecto
++-- mi_topologia/
+    +-- plan.json        <- TopologyPlan serializado (Pydantic JSON)
+    +-- metadata.json    <- Metadata del proyecto
 ```
 
-**Métodos:**
+**Methods:**
 
-| Método | Descripción |
+| Method | Description |
 |--------|-------------|
-| `save_plan(plan, name)` | Serializa el plan como JSON + genera metadata (nombre, fecha, conteos, is_valid) |
-| `load_plan(name)` | Deserializa JSON → `TopologyPlan` via `model_validate_json()` |
-| `list_projects()` | Escanea el directorio base, retorna lista de metadata por proyecto |
-| `delete_project(name)` | Elimina directorio del proyecto completo (`shutil.rmtree`) |
+| `save_plan(plan, name)` | Serializes the plan as JSON + generates metadata (name, date, counts, is_valid) |
+| `load_plan(name)` | Deserializes JSON -> `TopologyPlan` via `model_validate_json()` |
+| `list_projects()` | Scans the base directory, returns a list of metadata per project |
+| `delete_project(name)` | Deletes the entire project directory (`shutil.rmtree`) |
 
-**Metadata generado:**
+**Generated metadata:**
 ```json
 {
   "project_name": "mi_topologia",
@@ -45,4 +45,4 @@ projects/
 }
 ```
 
-**Nota:** El directorio base por defecto es `projects/` relativo al CWD del servidor. Los MCP tools `pt_list_projects` y `pt_load_project` usan este repositorio directamente.
+**Note:** The default base directory is `projects/` relative to the server's CWD. The MCP tools `pt_list_projects` and `pt_load_project` use this repository directly.

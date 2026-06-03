@@ -1,16 +1,16 @@
-"""Generador de CLI IOS para NAT/PAT.
+"""IOS CLI generator for NAT/PAT.
 
-Produce los comandos IOS que se aplican via `configureIosDevice` a través
-del bridge. Mismo contrato que acl_cli_generator:
+Produces the IOS commands that are applied via `configureIosDevice` through
+the bridge. Same contract as acl_cli_generator:
 
-  1. `generate_nat_interface_cli(config)` → list[str] de líneas IOS.
-  2. `generate_nat_body_cli(config)`      → list[str] de líneas IOS.
-  3. `build_nat_configure_payload(config)` → string completo con \\n internos,
-     listo para inyectar como segundo argumento de configureIosDevice.
+  1. `generate_nat_interface_cli(config)` -> list[str] of IOS lines.
+  2. `generate_nat_body_cli(config)`      -> list[str] of IOS lines.
+  3. `build_nat_configure_payload(config)` -> a full string with internal \\n,
+     ready to inject as the second argument of configureIosDevice.
 
-Restricción crítica: el payload DEBE viajar dentro de un solo statement JS
-(sin \\n reales en el código JS). Los \\n aquí son escapes de string literal
-— no saltos de línea de código fuente — así que executeCode() NO los stripea.
+Critical constraint: the payload MUST travel inside a single JS statement
+(no real \\n in the JS code). The \\n here are string-literal escapes
+-- not source-code line breaks -- so executeCode() does NOT strip them.
 """
 
 from __future__ import annotations
@@ -18,7 +18,7 @@ from ...domain.models.nat import NATConfig
 
 
 def generate_nat_interface_cli(config: NATConfig) -> list[str]:
-    """Genera los comandos para marcar interfaces inside/outside."""
+    """Generate the commands to mark interfaces as inside/outside."""
     return [
         f"interface {config.inside_interface}",
         " ip nat inside",
@@ -30,7 +30,7 @@ def generate_nat_interface_cli(config: NATConfig) -> list[str]:
 
 
 def generate_nat_body_cli(config: NATConfig) -> list[str]:
-    """Genera ACL inline (si procede), pool y comando ip nat inside source."""
+    """Generate inline ACL (if applicable), pool and the ip nat inside source command."""
     lines: list[str] = []
 
     if config.mode == "static":
@@ -40,20 +40,25 @@ def generate_nat_body_cli(config: NATConfig) -> list[str]:
             )
         return lines
 
-    # dynamic / pat — generamos el access-list inline si hay redes definidas
+    # dynamic / pat -- generate the inline access-list if there are networks defined
     if config.inside_networks:
         for net in config.inside_networks:
             lines.append(f"access-list {config.acl_number} permit {net}")
 
     if config.mode == "dynamic":
+        # pool is required for dynamic NAT; if missing, validate_nat_config emits
+        # NAT_MISSING_POOL - skip the pool lines here so CLI generation never
+        # crashes with AttributeError on a None pool (CLI is generated for
+        # inspection even when the config has validation errors).
         pool = config.pool
-        lines.append(
-            f"ip nat pool {pool.name} {pool.start_ip} {pool.end_ip} "
-            f"netmask {pool.netmask}"
-        )
-        lines.append(
-            f"ip nat inside source list {config.acl_number} pool {pool.name}"
-        )
+        if pool is not None:
+            lines.append(
+                f"ip nat pool {pool.name} {pool.start_ip} {pool.end_ip} "
+                f"netmask {pool.netmask}"
+            )
+            lines.append(
+                f"ip nat inside source list {config.acl_number} pool {pool.name}"
+            )
 
     elif config.mode == "pat":
         if config.use_interface_overload:
@@ -63,31 +68,32 @@ def generate_nat_body_cli(config: NATConfig) -> list[str]:
             )
         else:
             pool = config.pool
-            lines.append(
-                f"ip nat pool {pool.name} {pool.start_ip} {pool.end_ip} "
-                f"netmask {pool.netmask}"
-            )
-            lines.append(
-                f"ip nat inside source list {config.acl_number} "
-                f"pool {pool.name} overload"
-            )
+            if pool is not None:
+                lines.append(
+                    f"ip nat pool {pool.name} {pool.start_ip} {pool.end_ip} "
+                    f"netmask {pool.netmask}"
+                )
+                lines.append(
+                    f"ip nat inside source list {config.acl_number} "
+                    f"pool {pool.name} overload"
+                )
 
     return lines
 
 
 def build_nat_configure_payload(config: NATConfig) -> str:
-    """Construye el string completo para configureIosDevice.
+    """Build the full string for configureIosDevice.
 
-    Estructura:
+    Structure:
         enable
         configure terminal
         <interface inside/outside>
-        <nat body (static mappings o ACL + pool/overload)>
+        <nat body (static mappings or ACL + pool/overload)>
         end
         write memory
 
-    Las líneas se unen con \\n reales. Este string SE PASA como argumento
-    a configureIosDevice; los \\n aquí NO son del código JS.
+    The lines are joined with real \\n. This string IS PASSED as an argument
+    to configureIosDevice; the \\n here are NOT part of the JS code.
     """
     lines: list[str] = ["enable", "configure terminal"]
     lines.extend(generate_nat_interface_cli(config))
@@ -106,10 +112,10 @@ def build_nat_remove_payload(
     pool_name: str = "",
     static_mappings: list[dict] | None = None,
 ) -> str:
-    """Construye comandos para eliminar la configuración NAT de un router."""
+    """Build commands to remove the NAT configuration from a router."""
     lines: list[str] = ["enable", "configure terminal"]
 
-    # Quitar marcas inside/outside de interfaces
+    # Remove inside/outside marks from interfaces
     lines += [
         f"interface {inside_interface}",
         " no ip nat inside",
@@ -151,11 +157,11 @@ def build_nat_remove_payload(
 
 
 def build_nat_js_call(router: str, ios_payload: str) -> str:
-    """Envuelve el payload IOS en una llamada configureIosDevice como una sola línea JS.
+    """Wrap the IOS payload in a configureIosDevice call as a single JS line.
 
-    Los \\n dentro del payload se escapan a \\\\n para que viajen como
-    contenido del string literal JS — executeCode() stripea saltos REALES
-    de código fuente, pero no las secuencias de escape dentro de strings.
+    The \\n inside the payload are escaped to \\\\n so they travel as
+    content of the JS string literal -- executeCode() strips REAL source-code
+    line breaks, but not the escape sequences inside strings.
     """
     safe_router = router.replace("\\", "\\\\").replace('"', '\\"')
     safe_payload = (
@@ -165,3 +171,19 @@ def build_nat_js_call(router: str, ios_payload: str) -> str:
         .replace("\n", "\\n")
     )
     return f'configureIosDevice("{safe_router}", "{safe_payload}");'
+
+
+def build_nat_js_call_confirm(router: str, ios_payload: str) -> str:
+    """Like build_nat_js_call but PT reports whether configureIosDevice succeeded,
+    so the MCP layer can confirm the actual application (not just the enqueue)."""
+    safe_router = router.replace("\\", "\\\\").replace('"', '\\"')
+    safe_payload = (
+        ios_payload
+        .replace("\\", "\\\\")
+        .replace('"', '\\"')
+        .replace("\n", "\\n")
+    )
+    return (
+        f'var __ok = configureIosDevice("{safe_router}", "{safe_payload}"); '
+        f'reportResult(JSON.stringify({{ok: __ok === true}}));'
+    )

@@ -1,10 +1,10 @@
-"""Constantes del sistema."""
+"""System constants."""
 
-# Router/switch por defecto
+# Default router/switch
 DEFAULT_ROUTER = "2911"
 DEFAULT_SWITCH = "2960-24TT"
 
-# Layout (posición en pixels para el canvas de Packet Tracer)
+# Layout (pixel position for the Packet Tracer canvas)
 LAYOUT_X_START = 100
 LAYOUT_Y_ROUTER = 100
 LAYOUT_Y_SWITCH = 250
@@ -20,14 +20,16 @@ DEFAULT_LAN_PREFIX = 24
 DEFAULT_LINK_PREFIX = 30
 DEFAULT_DNS = "8.8.8.8"
 
-# Capacidades del sistema (para que el LLM sepa qué soportamos)
+# System capabilities (so the LLM knows what we support)
 CAPABILITIES = {
     "version": "0.4.0",
     "routing": ["static", "static_floating", "ospf", "eigrp", "rip", "none"],
     "features": ["dhcp", "wan", "switching", "auto_fix", "explain", "dry_run",
                  "floating_routes", "ospf_multi_process", "eigrp_as_config",
-                 "acl_standard", "acl_extended", "acl_apply_via_bridge"],
-    "unsupported": ["nat", "vlan", "stp"],
+                 "acl_standard", "acl_extended", "acl_apply_via_bridge",
+                 "nat_static", "nat_dynamic", "pat_overload",
+                 "vlan", "inter_vlan_routing", "router_on_a_stick", "trunk_802_1q"],
+    "unsupported": ["stp"],
     "max_routers": 20,
     "max_pcs_per_lan": 24,
     "max_switches_per_router": 4,

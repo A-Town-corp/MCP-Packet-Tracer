@@ -1,13 +1,13 @@
-"""Tests para los generadores."""
+"""Tests for the generators."""
 
 import pytest
-from src.packet_tracer_mcp.domain.models.plans import (
+from packet_tracer_mcp.domain.models.plans import (
     TopologyPlan, DevicePlan, LinkPlan, DHCPPool,
 )
-from src.packet_tracer_mcp.infrastructure.generator.ptbuilder_generator import (
+from packet_tracer_mcp.infrastructure.generator.ptbuilder_generator import (
     generate_ptbuilder_script,
 )
-from src.packet_tracer_mcp.infrastructure.generator.cli_config_generator import (
+from packet_tracer_mcp.infrastructure.generator.cli_config_generator import (
     generate_all_configs,
 )
 

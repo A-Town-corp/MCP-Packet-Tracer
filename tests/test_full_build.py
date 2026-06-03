@@ -1,8 +1,8 @@
-"""Test de integración: full build completo."""
+"""Integration test: complete full build."""
 
 import pytest
-from src.packet_tracer_mcp.application.dto.requests import PlanTopologyDTO
-from src.packet_tracer_mcp.application.use_cases.full_build import full_build
+from packet_tracer_mcp.application.dto.requests import PlanTopologyDTO
+from packet_tracer_mcp.application.use_cases.full_build import full_build
 
 
 class TestFullBuild:

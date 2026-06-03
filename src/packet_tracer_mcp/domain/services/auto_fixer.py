@@ -1,35 +1,38 @@
 """
-Auto-fixer de planes.
+Plan auto-fixer.
 
-Intenta corregir errores comunes automáticamente:
-  - Cambiar cable incorrecto
-  - Cambiar modelo si faltan puertos
-  - Corregir nombres de interfaces
+Tries to correct common errors automatically:
+  - Wrong cable type
+  - Model upgrade when ports are missing
+  - Invalid interface names
 """
 
 from __future__ import annotations
 from ..models.plans import TopologyPlan
-from ..models.errors import ValidationResult, ErrorCode
 from .validator import validate_plan
 from ...infrastructure.catalog.devices import resolve_model, get_ports_by_speed
 from ...infrastructure.catalog.cables import infer_cable
 from ...shared.enums import PortSpeed
 
+# 2911 has the most GigabitEthernet ports (3) among the common ISR routers,
+# so it is the upgrade target when a router runs out of GigE ports.
+_ROUTER_UPGRADE = "2911"
+
 
 def fix_plan(plan: TopologyPlan) -> tuple[TopologyPlan, list[str]]:
     """
-    Intenta corregir errores del plan automáticamente.
-    Retorna (plan_corregido, lista_de_correcciones_aplicadas).
+    Try to correct plan errors automatically.
+    Returns (fixed_plan, list_of_applied_fixes).
     """
     fixes: list[str] = []
 
-    # Fix 1: Corregir cables
+    # Fix 1: correct cables
     fixes.extend(_fix_cables(plan))
 
-    # Fix 2: Upgrade routers si faltan puertos
+    # Fix 2: upgrade routers that lack enough ports
     fixes.extend(_fix_insufficient_ports(plan))
 
-    # Fix 3: Corregir puertos inválidos por los del modelo correcto
+    # Fix 3: reassign invalid interfaces to valid ones on the model
     fixes.extend(_fix_invalid_ports(plan))
 
     # Re-validate
@@ -38,8 +41,17 @@ def fix_plan(plan: TopologyPlan) -> tuple[TopologyPlan, list[str]]:
     return plan, fixes
 
 
+def _infer_port_speed(port_name: str) -> PortSpeed | None:
+    """Infer the speed/type of a port from its name prefix (e.g.
+    'GigabitEthernet0/0' -> GIGABIT_ETHERNET)."""
+    for speed in PortSpeed:
+        if port_name.startswith(speed.value):
+            return speed
+    return None
+
+
 def _fix_cables(plan: TopologyPlan) -> list[str]:
-    """Corrige cables según las categorías de los dispositivos."""
+    """Fix cables based on the connected device categories."""
     fixes = []
     for link in plan.links:
         dev_a = plan.device_by_name(link.device_a)
@@ -51,20 +63,26 @@ def _fix_cables(plan: TopologyPlan) -> list[str]:
             old = link.cable
             link.cable = expected
             fixes.append(
-                f"Cable corregido: {link.device_a}↔{link.device_b} "
-                f"de '{old}' a '{expected}'"
+                f"Cable fixed: {link.device_a}<->{link.device_b} "
+                f"from '{old}' to '{expected}'"
             )
     return fixes
 
 
 def _fix_insufficient_ports(plan: TopologyPlan) -> list[str]:
-    """Si un router no tiene suficientes puertos GigE, lo upgrade a 2911."""
+    """Upgrade a router to 2911 when it lacks enough GigE ports - but only
+    when the upgrade would actually satisfy the need. If even 2911 is not
+    enough, leave it so validation reports INSUFFICIENT_PORTS instead of
+    silently mis-"fixing" the model."""
     fixes = []
     port_usage: dict[str, int] = {}
 
     for link in plan.links:
         for dev_name in (link.device_a, link.device_b):
             port_usage[dev_name] = port_usage.get(dev_name, 0) + 1
+
+    best = resolve_model(_ROUTER_UPGRADE)
+    best_gig = len(get_ports_by_speed(best, PortSpeed.GIGABIT_ETHERNET)) if best else 0
 
     for dev in plan.devices:
         if dev.category != "router":
@@ -75,23 +93,25 @@ def _fix_insufficient_ports(plan: TopologyPlan) -> list[str]:
         gig_count = len(get_ports_by_speed(model, PortSpeed.GIGABIT_ETHERNET))
         needed = port_usage.get(dev.name, 0)
 
-        if needed > gig_count and dev.model != "2911":
+        if needed > gig_count and dev.model != _ROUTER_UPGRADE and needed <= best_gig:
             old_model = dev.model
-            dev.model = "2911"
+            dev.model = _ROUTER_UPGRADE
             fixes.append(
-                f"Router {dev.name} upgradeado de {old_model} a 2911 "
-                f"(necesita {needed} puertos GigE, {old_model} solo tiene {gig_count})"
+                f"Router {dev.name} upgraded from {old_model} to {_ROUTER_UPGRADE} "
+                f"(needs {needed} GigE ports; {old_model} only has {gig_count})"
             )
 
     return fixes
 
 
 def _fix_invalid_ports(plan: TopologyPlan) -> list[str]:
-    """Intenta reasignar puertos inválidos al primer puerto disponible."""
+    """Reassign invalid interfaces to a free port, preferring one of the SAME
+    speed/type as the original (a router-router GigE link stays on GigE, not a
+    serial port)."""
     fixes = []
     used_ports: dict[str, set[str]] = {d.name: set() for d in plan.devices}
 
-    # Primero registrar puertos ya usados válidamente
+    # First record ports already used validly
     for link in plan.links:
         for dev_name, port in [(link.device_a, link.port_a), (link.device_b, link.port_b)]:
             dev = plan.device_by_name(dev_name)
@@ -101,7 +121,7 @@ def _fix_invalid_ports(plan: TopologyPlan) -> list[str]:
             if model and any(p.full_name == port for p in model.ports):
                 used_ports[dev_name].add(port)
 
-    # Ahora intentar corregir puertos inválidos
+    # Now fix invalid ports
     for link in plan.links:
         for attr_dev, attr_port in [("device_a", "port_a"), ("device_b", "port_b")]:
             dev_name = getattr(link, attr_dev)
@@ -112,17 +132,20 @@ def _fix_invalid_ports(plan: TopologyPlan) -> list[str]:
             model = resolve_model(dev.model)
             if not model:
                 continue
+            if any(p.full_name == port for p in model.ports):
+                continue  # already valid
 
-            if not any(p.full_name == port for p in model.ports):
-                # Puerto inválido — buscar uno libre
-                for p in model.ports:
-                    if p.full_name not in used_ports[dev_name]:
-                        old_port = port
-                        setattr(link, attr_port, p.full_name)
-                        used_ports[dev_name].add(p.full_name)
-                        fixes.append(
-                            f"Puerto corregido: {dev_name} de '{old_port}' a '{p.full_name}'"
-                        )
-                        break
+            want_speed = _infer_port_speed(port)
+            free = [p for p in model.ports if p.full_name not in used_ports[dev_name]]
+            same_speed = [p for p in free if want_speed and p.speed == want_speed.value]
+            chosen = same_speed or free
+            if chosen:
+                p = chosen[0]
+                old_port = port
+                setattr(link, attr_port, p.full_name)
+                used_ports[dev_name].add(p.full_name)
+                fixes.append(
+                    f"Port fixed: {dev_name} from '{old_port}' to '{p.full_name}'"
+                )
 
     return fixes

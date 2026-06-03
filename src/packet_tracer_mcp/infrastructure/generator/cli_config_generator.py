@@ -1,8 +1,8 @@
 """
-Generador de configuraciones CLI (IOS) para dispositivos Packet Tracer.
+CLI (IOS) configuration generator for Packet Tracer devices.
 
-A partir del TopologyPlan, genera bloques de comandos listos para
-pegar en la terminal de cada router/switch.
+From the TopologyPlan, generates command blocks ready to paste
+into the terminal of each router/switch.
 """
 
 from __future__ import annotations
@@ -11,8 +11,8 @@ from ...shared.utils import prefix_to_mask
 
 def generate_all_configs(plan: TopologyPlan) -> dict[str, str]:
     """
-    Genera configs CLI para todos los dispositivos que las necesiten.
-    Retorna {nombre_dispositivo: bloque_cli}.
+    Generate CLI configs for all devices that need them.
+    Returns {device_name: cli_block}.
     """
     configs: dict[str, str] = {}
 
@@ -28,7 +28,7 @@ def generate_all_configs(plan: TopologyPlan) -> dict[str, str]:
 
 
 def _router_config(router: DevicePlan, plan: TopologyPlan) -> str:
-    """Genera la config completa de un router."""
+    """Generate the complete config of a router."""
     lines: list[str] = []
 
     lines.append("enable")
@@ -37,12 +37,38 @@ def _router_config(router: DevicePlan, plan: TopologyPlan) -> str:
     lines.append("no ip domain-lookup")
     lines.append("")
 
-    # --- Interfaces ---
+    # --- dot1Q subinterfaces (router-on-a-stick) ---
+    subs = [s for s in plan.subinterfaces if s.router == router.name]
+    trunk_parents: list[str] = []
+    for s in subs:
+        if s.parent_port not in trunk_parents:
+            trunk_parents.append(s.parent_port)
+
+    # --- Physical interfaces (trunk ports are skipped: they carry no IP) ---
     for iface, ip_cidr in router.interfaces.items():
+        if iface in trunk_parents:
+            continue
         ip, prefix = ip_cidr.split("/")
         mask = prefix_to_mask(int(prefix))
         lines.append(f"interface {iface}")
         lines.append(f" ip address {ip} {mask}")
+        lines.append(" no shutdown")
+        lines.append(" exit")
+        lines.append("")
+
+    # Physical trunk port brought up WITHOUT IP, then one subinterface per VLAN.
+    # The `exit` between blocks is MANDATORY: without it, PT does not create the
+    # subinterface and the `ip address` commands land on the physical interface.
+    for parent in trunk_parents:
+        lines.append(f"interface {parent}")
+        lines.append(" no ip address")
+        lines.append(" no shutdown")
+        lines.append(" exit")
+        lines.append("")
+    for s in subs:
+        lines.append(f"interface {s.parent_port}.{s.vlan_id}")
+        lines.append(f" encapsulation dot1Q {s.vlan_id}")
+        lines.append(f" ip address {s.ip} {s.mask}")
         lines.append(" no shutdown")
         lines.append(" exit")
         lines.append("")
@@ -59,7 +85,7 @@ def _router_config(router: DevicePlan, plan: TopologyPlan) -> str:
         lines.append(" exit")
         lines.append("")
 
-    # --- Rutas estáticas ---
+    # --- Static routes ---
     static_routes = [r for r in plan.static_routes if r.router == router.name]
     for route in static_routes:
         line = f"ip route {route.destination} {route.mask} {route.next_hop}"
@@ -111,19 +137,66 @@ def _router_config(router: DevicePlan, plan: TopologyPlan) -> str:
     return "\n".join(lines)
 
 
+def _switch_port_for(link, switch_name: str) -> str | None:
+    """Return the port on the `switch_name` side of a link, or None."""
+    if link.device_a == switch_name:
+        return link.port_a
+    if link.device_b == switch_name:
+        return link.port_b
+    return None
+
+
+def _needs_trunk_encap(model: str) -> bool:
+    """Multilayer switches (3560/3650) require `switchport trunk
+    encapsulation dot1q`; the 2950/2960 are dot1q-only and REJECT that command."""
+    return any(m in (model or "") for m in ("3560", "3650"))
+
+
 def _switch_config(switch: DevicePlan, plan: TopologyPlan) -> str:
-    """Genera config básica de un switch."""
-    lines: list[str] = []
-    lines.append("enable")
-    lines.append("configure terminal")
-    lines.append(f"hostname {switch.name}")
+    """Generate the config of a switch: hostname + VLANs + access/trunk ports.
+
+    For a flat LAN without VLANs (plan.vlans empty and links in access mode with
+    access_vlan=0) it only emits the hostname (ports stay in VLAN 1 by
+    default), preserving the previous behavior.
+    """
+    lines: list[str] = ["enable", "configure terminal", f"hostname {switch.name}"]
+
+    # --- VLAN database ---
+    for v in [v for v in plan.vlans if v.switch == switch.name]:
+        if v.vlan_id == 1:
+            continue  # VLAN 1 exists by default
+        lines.append(f"vlan {v.vlan_id}")
+        if v.name:
+            lines.append(f" name {v.name}")
+        lines.append(" exit")
+
+    # --- Ports (access / trunk) according to this switch's links ---
+    for link in plan.links:
+        sw_port = _switch_port_for(link, switch.name)
+        if sw_port is None:
+            continue
+        if link.mode == "trunk":
+            lines.append(f"interface {sw_port}")
+            if _needs_trunk_encap(switch.model):
+                lines.append(" switchport trunk encapsulation dot1q")
+            lines.append(" switchport mode trunk")
+            if link.trunk_allowed:
+                allowed = ",".join(str(v) for v in link.trunk_allowed)
+                lines.append(f" switchport trunk allowed vlan {allowed}")
+            lines.append(" exit")
+        elif link.access_vlan:
+            lines.append(f"interface {sw_port}")
+            lines.append(" switchport mode access")
+            lines.append(f" switchport access vlan {link.access_vlan}")
+            lines.append(" exit")
+
     lines.append("end")
     lines.append("write memory")
     return "\n".join(lines)
 
 
 def generate_pc_config(device: DevicePlan, use_dhcp: bool | None = None) -> str:
-    """Genera instrucciones de configuración para un PC."""
+    """Generate configuration instructions for a PC."""
     lines: list[str] = []
     lines.append(f"--- {device.name} ---")
 
@@ -137,7 +210,7 @@ def generate_pc_config(device: DevicePlan, use_dhcp: bool | None = None) -> str:
         lines.append(f"Default Gateway: {device.gateway}")
     lines.append("DNS Server: 8.8.8.8")
     if use_dhcp:
-        lines.append("Configurar como DHCP para obtener IP automáticamente.")
+        lines.append("Configure as DHCP to obtain an IP automatically.")
     else:
-        lines.append("Configurar IP estática con los valores anteriores.")
+        lines.append("Configure a static IP with the values above.")
     return "\n".join(lines)

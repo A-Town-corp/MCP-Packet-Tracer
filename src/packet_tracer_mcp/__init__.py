@@ -1,1 +1,1 @@
-"""Packet Tracer MCP - Servidor MCP para Cisco Packet Tracer."""
+"""Packet Tracer MCP - MCP server for Cisco Packet Tracer."""

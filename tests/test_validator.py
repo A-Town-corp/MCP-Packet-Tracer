@@ -1,16 +1,16 @@
-"""Tests para el Validator."""
+"""Tests for the Validator."""
 
 import pytest
-from src.packet_tracer_mcp.domain.models.plans import (
+from packet_tracer_mcp.domain.models.plans import (
     TopologyPlan, DevicePlan, LinkPlan,
 )
-from src.packet_tracer_mcp.domain.services.validator import validate_plan
-from src.packet_tracer_mcp.domain.models.errors import ErrorCode
+from packet_tracer_mcp.domain.services.validator import validate_plan
+from packet_tracer_mcp.domain.models.errors import ErrorCode
 
 
 class TestValidator:
     def _simple_plan(self) -> TopologyPlan:
-        """Crea un plan simple válido."""
+        """Create a simple valid plan."""
         return TopologyPlan(
             name="test",
             devices=[

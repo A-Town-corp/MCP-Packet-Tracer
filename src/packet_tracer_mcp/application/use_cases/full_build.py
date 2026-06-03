@@ -1,5 +1,5 @@
 """
-Use case: full build — planifica, valida, genera y explica en un solo paso.
+Use case: full build -- plan, validate, generate and explain in a single step.
 """
 
 from __future__ import annotations
@@ -13,7 +13,7 @@ from ...domain.services.estimator import estimate_from_plan
 
 
 def full_build(dto: PlanTopologyDTO) -> BuildResponse:
-    """Ejecuta el flujo completo de planificación."""
+    """Run the complete planning flow."""
     plan, validation = plan_topology(dto)
 
     script = generate_full_script(plan)

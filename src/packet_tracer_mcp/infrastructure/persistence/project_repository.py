@@ -1,5 +1,5 @@
 """
-Repositorio de proyectos: persistencia de planes y artefactos.
+Project repository: persistence of plans and artifacts.
 """
 
 from __future__ import annotations
@@ -7,19 +7,29 @@ import json
 from pathlib import Path
 from datetime import datetime, timezone
 from ...domain.models.plans import TopologyPlan
+from ...shared.utils import safe_name
 
 
 class ProjectRepository:
-    """Gestiona la persistencia de proyectos."""
+    """Manages project persistence."""
 
     def __init__(self, base_dir: str | Path = "projects"):
         self.base_dir = Path(base_dir)
         self.base_dir.mkdir(parents=True, exist_ok=True)
 
+    @staticmethod
+    def _safe_name(name: str) -> str:
+        """Normalize a project name to a filesystem-safe dir.
+
+        Delegated to shared.utils.safe_name so that save/load/delete and the
+        ManualExecutor use exactly the same normalization (previously save
+        normalized but load/delete did not -> FileNotFound).
+        """
+        return safe_name(name)
+
     def save_plan(self, plan: TopologyPlan, project_name: str | None = None) -> Path:
-        """Guarda un plan como JSON."""
-        base_name = (project_name or plan.name or "topology").strip() or "topology"
-        name = base_name.replace(" ", "_")
+        """Save a plan as JSON."""
+        name = self._safe_name(project_name or plan.name or "topology")
         project_dir = self.base_dir / name
         project_dir.mkdir(parents=True, exist_ok=True)
 
@@ -40,14 +50,14 @@ class ProjectRepository:
         return plan_path
 
     def load_plan(self, project_name: str) -> TopologyPlan:
-        """Carga un plan desde JSON."""
-        plan_path = self.base_dir / project_name / "plan.json"
+        """Load a plan from JSON."""
+        plan_path = self.base_dir / self._safe_name(project_name) / "plan.json"
         if not plan_path.exists():
-            raise FileNotFoundError(f"Proyecto '{project_name}' no encontrado")
+            raise FileNotFoundError(f"Project '{project_name}' not found")
         return TopologyPlan.model_validate_json(plan_path.read_text(encoding="utf-8"))
 
     def list_projects(self) -> list[dict]:
-        """Lista todos los proyectos guardados."""
+        """List all saved projects."""
         projects = []
         for d in sorted(self.base_dir.iterdir()):
             if d.is_dir():
@@ -60,8 +70,8 @@ class ProjectRepository:
         return projects
 
     def delete_project(self, project_name: str) -> bool:
-        """Elimina un proyecto."""
-        project_dir = self.base_dir / project_name
+        """Delete a project."""
+        project_dir = self.base_dir / self._safe_name(project_name)
         if not project_dir.exists():
             return False
         import shutil

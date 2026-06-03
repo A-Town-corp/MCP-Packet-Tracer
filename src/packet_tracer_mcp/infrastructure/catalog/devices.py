@@ -1,8 +1,8 @@
 """
-Catálogo de dispositivos de Packet Tracer.
+Packet Tracer device catalog.
 
-Puertos verificados contra PT 8.x en vivo — NO incluimos Vlan1
-porque no se usa para cableado físico (es SVI).
+Ports verified against live PT 8.x -- we do NOT include Vlan1
+because it is not used for physical cabling (it is an SVI).
 """
 
 from __future__ import annotations
@@ -13,7 +13,7 @@ from ...shared.enums import PortSpeed
 
 @dataclass(frozen=True)
 class PortSpec:
-    """Especificación de un puerto físico."""
+    """Specification of a physical port."""
     speed: str
     slot: str
     full_name: str = ""
@@ -26,7 +26,7 @@ class PortSpec:
 
 @dataclass(frozen=True)
 class DeviceModel:
-    """Modelo de dispositivo de Packet Tracer."""
+    """Packet Tracer device model."""
     pt_type: str
     category: str
     ports: tuple[PortSpec, ...]
@@ -47,7 +47,7 @@ def _eth(slot: str) -> PortSpec:
 
 
 # =====================================================================
-# ROUTERS (verified — no serial ports without HWIC modules)
+# ROUTERS (verified -- no serial ports without HWIC modules)
 # =====================================================================
 ROUTER_1841 = DeviceModel(
     pt_type="1841", category="router", display_name="Cisco 1841",
@@ -464,7 +464,7 @@ FIBER_WALL_MOUNT = DeviceModel(
 )
 
 # =====================================================================
-# IOT (generic — represents all ~80 IoT Type 39 devices)
+# IOT (generic -- represents all ~80 IoT Type 39 devices)
 # =====================================================================
 THING_PT = DeviceModel(
     pt_type="Thing", category="iot", display_name="IoT Thing",
@@ -473,7 +473,7 @@ THING_PT = DeviceModel(
 
 
 # =====================================================================
-# CATÁLOGO INDEXADO
+# INDEXED CATALOG
 # =====================================================================
 ALL_MODELS: dict[str, DeviceModel] = {
     m.pt_type: m for m in [
@@ -528,19 +528,19 @@ ALL_MODELS: dict[str, DeviceModel] = {
 
 
 def resolve_model(name: str) -> DeviceModel | None:
-    """Resuelve un nombre/alias a un DeviceModel."""
+    """Resolve a name/alias to a DeviceModel."""
     from .aliases import MODEL_ALIASES
     key = MODEL_ALIASES.get(name.lower(), name)
     return ALL_MODELS.get(key)
 
 
 def get_ports_by_speed(model: DeviceModel, speed: str) -> list[PortSpec]:
-    """Devuelve los puertos de un modelo filtrados por velocidad."""
+    """Return the ports of a model filtered by speed."""
     return [p for p in model.ports if p.speed == speed]
 
 
 def get_valid_ports(model_name: str) -> set[str]:
-    """Devuelve el set de nombres de puertos válidos para un modelo."""
+    """Return the set of valid port names for a model."""
     model = resolve_model(model_name)
     if not model:
         return set()

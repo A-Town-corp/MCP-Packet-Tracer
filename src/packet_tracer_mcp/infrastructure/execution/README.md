@@ -1,121 +1,121 @@
 # infrastructure/execution/
 
-Estrategias de despliegue de topologías. Implementan diferentes formas de llevar un `TopologyPlan` a Packet Tracer o a disco.
+Topology deployment strategies. They implement different ways of taking a `TopologyPlan` to Packet Tracer or to disk.
 
-## Arquitectura
+## Architecture
 
 ```
 ExecutorBase (ABC)
-├── ManualExecutor    → Exporta archivos a disco
-├── DeployExecutor    → Exporta + copia al portapapeles + instrucciones  
-└── LiveExecutor      → Envía comandos en tiempo real vía HTTP bridge
-     └── PTCommandBridge → Servidor HTTP local (puerto 54321)
++-- ManualExecutor    -> Exports files to disk
++-- DeployExecutor    -> Exports + copies to clipboard + instructions
++-- LiveExecutor      -> Sends commands in real time via the HTTP bridge
+     +-- PTCommandBridge -> Local HTTP server (port 54321)
 ```
 
-## Archivos
+## Files
 
-### `executor_base.py` — Clase base abstracta
+### `executor_base.py` - Abstract base class
 
 ```python
 class ExecutorBase(ABC):
-    def execute(plan, project_name) → dict    # Abstract
-    def is_available() → bool                  # Abstract
+    def execute(plan, project_name) -> dict    # Abstract
+    def is_available() -> bool                  # Abstract
 ```
 
-Contrato que todos los executors deben cumplir.
+Contract that all executors must fulfill.
 
 ---
 
-### `manual_executor.py` — Exportación a disco
+### `manual_executor.py` - Export to disk
 
-Exporta todos los artefactos del plan como archivos al sistema de archivos.
+Exports all plan artifacts as files to the filesystem.
 
 ```python
 class ManualExecutor(ExecutorBase):
-    def execute(plan, project_name) → dict
-    def is_available() → True  # Siempre disponible
+    def execute(plan, project_name) -> dict
+    def is_available() -> True  # Siempre disponible
 ```
 
-**Archivos generados:**
-| Archivo | Contenido |
+**Generated files:**
+| File | Content |
 |---------|-----------|
-| `topology.js` | Script PTBuilder básico (addDevice + addLink) |
-| `full_build.js` | Script completo con configuraciones |
-| `{Device}_config.txt` | Config CLI por dispositivo (R1, SW1, etc.) |
-| `plan.json` | Plan completo serializado |
-| `metadata.json` | Metadata del proyecto (nombre, fecha, conteos) |
+| `topology.js` | Basic PTBuilder script (addDevice + addLink) |
+| `full_build.js` | Full script with configurations |
+| `{Device}_config.txt` | CLI config per device (R1, SW1, etc.) |
+| `plan.json` | Full serialized plan |
+| `metadata.json` | Project metadata (name, date, counts) |
 
 ---
 
-### `deploy_executor.py` — Despliegue con clipboard
+### `deploy_executor.py` - Deployment with clipboard
 
-Extiende la exportación a disco agregando copia al portapapeles y generación de instrucciones paso a paso.
+Extends the export-to-disk by adding clipboard copy and step-by-step instruction generation.
 
 ```python
 class DeployExecutor(ExecutorBase):
     def __init__(output_dir="projects")
-    def execute(plan, project_name) → dict
+    def execute(plan, project_name) -> dict
 ```
 
-**Flujo:**
-1. Genera scripts y configs (igual que ManualExecutor)
-2. Copia `topology.js` al portapapeles (solo Windows vía `clip.exe`)
-3. Guarda todos los archivos a disco
-4. Genera instrucciones paso a paso para el usuario
+**Flow:**
+1. Generates scripts and configs (same as ManualExecutor)
+2. Copies `topology.js` to the clipboard (Windows only, via `clip.exe`)
+3. Saves all files to disk
+4. Generates step-by-step instructions for the user
 
-**Nota:** La función de clipboard solo funciona en Windows. En macOS/Linux, los archivos se exportan pero el clipboard se omite.
+**Note:** The clipboard function works on Windows only. On macOS/Linux, the files are exported but the clipboard step is skipped.
 
 ---
 
-### `live_bridge.py` — HTTP Bridge para Packet Tracer (~300 líneas)
+### `live_bridge.py` - HTTP Bridge for Packet Tracer (~300 lines)
 
-Servidor HTTP local que permite comunicación bidireccional entre Python y Packet Tracer en tiempo real.
+Local HTTP server that enables bidirectional communication between Python and Packet Tracer in real time.
 
 ```python
 class PTCommandBridge:
     def __init__(port=54321)
-    def start() → None
-    def send(js_code) → bool
-    def send_and_wait(js_code, timeout) → str | None
-    def bootstrap_script() → str
+    def start() -> None
+    def send(js_code) -> bool
+    def send_and_wait(js_code, timeout) -> str | None
+    def bootstrap_script() -> str
     @property
-    def is_connected → bool
+    def is_connected -> bool
 ```
 
-**Endpoints HTTP:**
-| Método | Ruta | Descripción |
+**HTTP endpoints:**
+| Method | Path | Description |
 |--------|------|-------------|
-| `GET` | `/next` | PTBuilder polling — retorna siguiente comando JS de la cola |
-| `GET` | `/ping` | Health check básico |
-| `GET` | `/status` | Estado detallado del bridge |
-| `POST` | `/result` | PTBuilder envía resultado de ejecución |
-| `POST` | `/queue` | Encola un comando JS externamente |
+| `GET` | `/next` | PTBuilder polling - returns the next JS command from the queue |
+| `GET` | `/ping` | Basic health check |
+| `GET` | `/status` | Detailed bridge status |
+| `POST` | `/result` | PTBuilder sends an execution result |
+| `POST` | `/queue` | Enqueues a JS command externally |
 
-**Diseño:**
+**Design:**
 ```
 Python (PTCommandBridge)         PT Builder (QWebEngine)
-       ↓                              ↓
-  POST /queue ──→ cola ─────→ GET /next (polling 500ms)
-                                       ↓
+       v                              v
+  POST /queue ---> cola ------> GET /next (polling 500ms)
+                                       v
                                $se('runCode', cmd)
-                                       ↓
-                               POST /result ──→ callback
+                                       v
+                               POST /result ---> callback
 ```
 
-**Bootstrap:** One-liner JS que se pega en PT Builder Code Editor:
+**Bootstrap:** One-liner JS pasted into the PT Builder Code Editor:
 ```javascript
 window.webview.evaluateJavaScriptAsync("setInterval(function(){...},500)");
 ```
 
 ---
 
-### `live_executor.py` — Ejecución en tiempo real
+### `live_executor.py` - Real-time execution
 
-Usa el bridge para enviar comandos del plan directamente a un PT en ejecución.
+Uses the bridge to send the plan's commands directly to a running PT.
 
 ```python
 class LiveExecutor:
-    def execute(plan, delay=500) → dict
+    def execute(plan, delay=500) -> dict
 ```
 
-Convierte `TopologyPlan` → secuencia de comandos JS → envía via `PTCommandBridge` con delay configurable entre cada comando.
+Converts `TopologyPlan` -> JS command sequence -> sends via `PTCommandBridge` with a configurable delay between each command.

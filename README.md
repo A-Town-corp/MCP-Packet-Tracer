@@ -2,7 +2,7 @@
 
 # <img src="https://www.netacad.com/skillsforall/img/desktop/cisco_packet_tracer.png" width="36" align="center"/> Packet Tracer MCP Server
 
-**Tell your AI _"create a network with 3 routers, OSPF and DHCP"_ — it plans, validates, generates, and deploys the topology directly into Cisco Packet Tracer in real time.**
+**Tell your AI _"create a network with 3 routers, OSPF and DHCP"_ - it plans, validates, generates, and deploys the topology directly into Cisco Packet Tracer in real time.**
 
 [![Version](https://img.shields.io/badge/version-0.4.0-blue?style=flat-square)](https://github.com/Mats2208/MCP-Packet-Tracer/releases)
 [![Python](https://img.shields.io/badge/python-3.11+-3776AB?style=flat-square&logo=python&logoColor=white)](https://python.org)
@@ -34,7 +34,7 @@
 <p align="center">
   <img src="demo/topology-screenshot.png" alt="3-router OSPF topology deployed to Packet Tracer" width="720"/>
 </p>
-<p align="center"><sub>3-router linear topology with OSPF, DHCP, and 6 PCs — planned and deployed via MCP tools</sub></p>
+<p align="center"><sub>3-router linear topology with OSPF, DHCP, and 6 PCs - planned and deployed via MCP tools</sub></p>
 
 <table>
 <tr>
@@ -50,18 +50,18 @@
 </table>
 
 <details>
-<summary><strong>More screenshots — MCP server in different clients</strong></summary>
+<summary><strong>More screenshots - MCP server in different clients</strong></summary>
 <br/>
 
 <p align="center">
   <img src="img/Foto1.png" alt="MCP server connected in OpenAI Codex CLI" width="700"/>
 </p>
-<p align="center"><sub>MCP server running — tools and resources exposed in OpenAI Codex CLI</sub></p>
+<p align="center"><sub>MCP server running - tools and resources exposed in OpenAI Codex CLI</sub></p>
 
 <p align="center">
   <img src="img/Foto2.png" alt="MCP server connected in Claude Code" width="700"/>
 </p>
-<p align="center"><sub>MCP server connected in Claude Code — ready to receive tool calls</sub></p>
+<p align="center"><sub>MCP server connected in Claude Code - ready to receive tool calls</sub></p>
 
 <p align="center">
   <img src="img/LinuxCapture.png" alt="MCP server connected in Claude Code using Arch Linux" width="700"/>
@@ -71,9 +71,9 @@
 </details>
 
 <p align="center">
-  <img src="demo/live-deploy.gif" alt="Live deploy demo — from prompt to Packet Tracer in real time" width="720"/>
+  <img src="demo/live-deploy.gif" alt="Live deploy demo - from prompt to Packet Tracer in real time" width="720"/>
 </p>
-<p align="center"><sub>Live deploy — from natural-language prompt to running topology in Packet Tracer</sub></p>
+<p align="center"><sub>Live deploy - from natural-language prompt to running topology in Packet Tracer</sub></p>
 
 ---
 
@@ -104,17 +104,17 @@ A **Model Context Protocol (MCP) server** that gives any LLM (GitHub Copilot, Cl
 
 ```
 Natural language prompt
-        │
+        |
   LLM (GitHub Copilot / Claude)
-        │  MCP tools
+        |  MCP tools
   Packet Tracer MCP Server   (:39000)
-        │  HTTP bridge
+        |  HTTP bridge
   PTBuilder in Packet Tracer  (:54321)
-        │  Script Engine
+        |  Script Engine
   Cisco Packet Tracer
-  ── devices created
-  ── cables connected
-  ── IOS configs applied
+  -- devices created
+  -- cables connected
+  -- IOS configs applied
 ```
 
 **Key capabilities:**
@@ -125,12 +125,13 @@ Natural language prompt
 | **IP Addressing** | Automatic /24 LANs + /30 WAN links | Sequential assignment, gateway at `.1` |
 | **DHCP** | Auto pool generation | One pool per LAN, gateway excluded |
 | **Routing** | Static / OSPF / EIGRP / RIP | Full IOS command generation |
-| **Validation** | 24 typed error codes + auto-fixer | Wrong cables, missing ports, model upgrades |
+| **VLANs** | Router-on-a-stick, 802.1Q trunk + dot1Q subinterfaces | VLAN DB, access/trunk ports, inter-VLAN routing |
+| **Validation** | Typed error codes + auto-fixer + subnet-overlap | Wrong cables, missing ports, overlapping subnets, model upgrades |
 | **ACL** | Standard, extended and named ACLs | Apply, bind and remove ACLs on live routers |
 | **NAT / PAT** | Static NAT, dynamic NAT, PAT overload | Translate addresses on live routers via bridge |
-| **Deploy** | Real-time HTTP bridge to Packet Tracer | No copy-paste — commands stream directly |
+| **Deploy** | Real-time HTTP bridge to Packet Tracer | No copy-paste - commands stream directly |
 | **Export** | Plans, JS scripts, CLI configs to disk | Reusable project files |
-| **Catalog** | 74 devices · 151 modules · 15 cables | 34 categories, 101 aliases |
+| **Catalog** | 74 devices - 151 modules - 15 cables | 34 categories, 101 aliases |
 
 ---
 
@@ -146,10 +147,10 @@ pip install -e .
 
 ## ◈ Quick Start
 
-After running `pip install -e .` (see [Installation](#-installation)) the module `packet_tracer_mcp` is importable from any directory. That means **`python -m packet_tracer_mcp --stdio` works from anywhere** — no need to `cd` into the repo, no need to keep a server running in background. Most clients below use this stdio entry point and auto-launch the server on demand.
+After running `pip install -e .` (see [Installation](#-installation)) the module `packet_tracer_mcp` is importable from any directory. That means **`python -m packet_tracer_mcp --stdio` works from anywhere** - no need to `cd` into the repo, no need to keep a server running in background. Most clients below use this stdio entry point and auto-launch the server on demand.
 
 > **Two transport modes:**
-> - **stdio** (recommended for desktop clients): the client spawns the server as a child process. Zero manual steps, works from any directory. The internal HTTP bridge to Packet Tracer (`:54321`) still starts automatically inside the spawned process — live deploy works the same.
+> - **stdio** (recommended for desktop clients): the client spawns the server as a child process. Zero manual steps, works from any directory. The internal HTTP bridge to Packet Tracer (`:54321`) still starts automatically inside the spawned process - live deploy works the same.
 > - **streamable-http** (`http://127.0.0.1:39000/mcp`): you start the server yourself with `python -m packet_tracer_mcp` and multiple clients can share the same instance. Useful for VS Code multi-window setups or remote/shared scenarios.
 
 ### 1 &mdash; Connect your MCP client
@@ -188,12 +189,12 @@ The config path depends on **how Claude Desktop was installed**. This matters on
 
 | OS / install source | Config path |
 |---|---|
-| Windows — installer from [claude.ai/download](https://claude.ai/download) | `%APPDATA%\Claude\claude_desktop_config.json` |
-| Windows — Microsoft Store / MSIX | `%LOCALAPPDATA%\Packages\Claude_pzs8sxrjxfjjc\LocalCache\Roaming\Claude\claude_desktop_config.json` |
+| Windows - installer from [claude.ai/download](https://claude.ai/download) | `%APPDATA%\Claude\claude_desktop_config.json` |
+| Windows - Microsoft Store / MSIX | `%LOCALAPPDATA%\Packages\Claude_pzs8sxrjxfjjc\LocalCache\Roaming\Claude\claude_desktop_config.json` |
 | macOS | `~/Library/Application Support/Claude/claude_desktop_config.json` |
 | Linux | `~/.config/Claude/claude_desktop_config.json` |
 
-> **How to tell which install you have on Windows:** run `Get-Process claude \| Select-Object -ExpandProperty Path` in PowerShell. If the path contains `WindowsApps\Claude_*`, you have MSIX — use the second row above. Otherwise use the first.
+> **How to tell which install you have on Windows:** run `Get-Process claude \| Select-Object -ExpandProperty Path` in PowerShell. If the path contains `WindowsApps\Claude_*`, you have MSIX - use the second row above. Otherwise use the first.
 
 Add (or merge into the existing file):
 
@@ -208,7 +209,7 @@ Add (or merge into the existing file):
 }
 ```
 
-After saving, **fully quit** Claude Desktop and reopen — closing the window is not enough if "run in background" is on. On Windows: right-click the tray icon → **Quit**, or run `Get-Process claude | Stop-Process -Force`.
+After saving, **fully quit** Claude Desktop and reopen - closing the window is not enough if "run in background" is on. On Windows: right-click the tray icon -> **Quit**, or run `Get-Process claude | Stop-Process -Force`.
 
 > **Windows / MSIX gotcha:** the sandbox may not expose `python` on PATH. If the MCP indicator never lights up, replace `"python"` with the absolute path to your interpreter:
 > ```json
@@ -236,7 +237,7 @@ Restart your `codex` session. Codex picks up MCP servers on launch.
 <details>
 <summary><img src="https://img.shields.io/badge/VS%20Code-007ACC?style=flat-square&logo=visualstudiocode&logoColor=white" alt="VS Code"/> &ensp; <strong><code>.vscode/mcp.json</code> (Copilot, Continue, Cline)</strong></summary>
 
-Two options. **stdio** is the simplest — VS Code spawns the server when needed:
+Two options. **stdio** is the simplest - VS Code spawns the server when needed:
 
 ```json
 {
@@ -282,12 +283,12 @@ Per-user (global): `~/.cursor/mcp.json`. Per-project: `<workspace>/.cursor/mcp.j
 }
 ```
 
-Reload the Cursor window after saving (Cmd/Ctrl+Shift+P → "Reload Window").
+Reload the Cursor window after saving (Cmd/Ctrl+Shift+P -> "Reload Window").
 
 </details>
 
 <details>
-<summary><strong>◇ Generic stdio template — any other MCP client</strong></summary>
+<summary><strong>◇ Generic stdio template - any other MCP client</strong></summary>
 
 The vast majority of MCP clients accept the same three fields. Translate to whatever syntax your client expects:
 
@@ -307,7 +308,7 @@ For HTTP-only clients, start the server with `python -m packet_tracer_mcp` and p
 "Create a network with 2 routers, 2 switches, 4 PCs, DHCP and static routing"
 ```
 
-The server handles the rest: **planning → validation → generation → deploy**.
+The server handles the rest: **planning -> validation -> generation -> deploy**.
 
 > For live deploy into a running Packet Tracer instance, also paste the [bootstrap snippet](#-live-deploy-setup) once into PT's *Builder Code Editor*. The MCP tools work even without it (you can still plan, generate scripts and configs, and export to disk).
 
@@ -319,21 +320,21 @@ The server handles the rest: **planning → validation → generation → deploy
 
 ```
 TopologyRequest
-      │
-  Orchestrator ─── IPPlanner (assigns /24 LANs + /30 inter-router links)
-      │
-  Validator    ─── 15 typed error codes, port/cable/IP checks
-      │
-  AutoFixer    ─── fixes wrong cables, upgrades routers, reassigns ports
-      │
+      |
+  Orchestrator --- IPPlanner (assigns /24 LANs + /30 inter-router links)
+      |
+  Validator    --- 15 typed error codes, port/cable/IP checks
+      |
+  AutoFixer    --- fixes wrong cables, upgrades routers, reassigns ports
+      |
   TopologyPlan (validated, fully addressed)
-      │
-  ┌──────────────────┬──────────────────────┬──────────────────────┐
+      |
+  +------------------+----------------------+----------------------+
   ▼                  ▼                      ▼                      ▼
 addDevice()      addModule()            addLink()        configureIosDevice()
 (place device)   (HWIC/NIM/NM)          (cable)          configurePcIp()
-  │                  │                      │                      │
-PTBuilder Script ── sent via HTTP bridge ─▶ Packet Tracer Script Engine
+  |                  |                      |                      |
+PTBuilder Script -- sent via HTTP bridge -▶ Packet Tracer Script Engine
 ```
 
 ### Why Port 39000?
@@ -342,11 +343,11 @@ PTBuilder Script ── sent via HTTP bridge ─▶ Packet Tracer Script Engine
 <summary>Design rationale</summary>
 
 The server uses **streamable-http** instead of stdio. This means:
-- **Persistent** — stays running, not restarted per editor session
-- **Multiple clients** — VS Code, Claude Desktop, and others can connect simultaneously
-- **Shared state** — the HTTP bridge to Packet Tracer stays alive across requests
-- **Debuggable** — `curl http://127.0.0.1:39000/mcp` or tail logs in the terminal
-- **Decoupled** — server lifecycle is independent from the editor
+- **Persistent** - stays running, not restarted per editor session
+- **Multiple clients** - VS Code, Claude Desktop, and others can connect simultaneously
+- **Shared state** - the HTTP bridge to Packet Tracer stays alive across requests
+- **Debuggable** - `curl http://127.0.0.1:39000/mcp` or tail logs in the terminal
+- **Decoupled** - server lifecycle is independent from the editor
 
 Port 39000 was chosen to avoid collisions with common ports (3000, 5000, 8000, 8080) and the internal bridge at 54321.
 
@@ -376,7 +377,7 @@ Port 39000 was chosen to avoid collisions with common ports (3000, 5000, 8000, 8
 
 | Tool | Description |
 |------|-------------|
-| `pt_plan_topology` | Generates a complete `TopologyPlan` — devices, links, IPs, DHCP, routes, modules |
+| `pt_plan_topology` | Generates a complete `TopologyPlan` - devices, links, IPs, DHCP, routes, modules |
 
 > `pt_plan_topology` returns machine-readable JSON. Use its output as input for all downstream tools.
 
@@ -432,32 +433,32 @@ Port 39000 was chosen to avoid collisions with common ports (3000, 5000, 8000, 8
 
 ### Modules
 
-Hot-install expansion modules (HWIC, NM, NIM, WIC) on routers already placed in the active topology. The runtime patch powers the device off, installs the module and powers it back on automatically — no manual shutdown needed.
+Hot-install expansion modules (HWIC, NM, NIM, WIC) on routers already placed in the active topology. The runtime patch powers the device off, installs the module and powers it back on automatically - no manual shutdown needed.
 
 | Tool | Description |
 |------|-------------|
 | `pt_list_modules` | Lists modules in the catalog. Optional filter by router model (e.g. `2911`) or category (`router_hwic`, `router_nm`, `router_nim`, `router_wic`) |
 | `pt_add_module` | Installs a single module in a slot of an existing device. Validates module exists, slot is a non-empty string, device is present in PT and module/router compatibility before sending |
-| `pt_install_modules_batch` | Installs N modules across one or more devices in a single power-cycle. Recommended over multiple `pt_add_module` calls — avoids the per-call power-on delay that can time out the bridge bootstrap |
+| `pt_install_modules_batch` | Installs N modules across one or more devices in a single power-cycle. Recommended over multiple `pt_add_module` calls - avoids the per-call power-on delay that can time out the bridge bootstrap |
 
 > Slot is a **string** that mirrors the addressing PT expects:
-> - HWIC on 1941/2901/2911 → `"0/0"`, `"0/1"`, `"0/2"`, `"0/3"` (chassis-slot/hwic-subslot)
-> - NIM on ISR4321/4331 → `"0"`, `"1"`
-> - NM on Router-PT / 2811 / 2620XM / 2621XM → `"1"`, `"2"` *(ISR G2 like 2911/2901/1941 do **not** have NM slots — use 2× HWIC-2T for 4 serials)*
-> - Cloud-PT / hosts → `"0"`, `"1"`, … per the device's slot map
+> - HWIC on 1941/2901/2911 -> `"0/0"`, `"0/1"`, `"0/2"`, `"0/3"` (chassis-slot/hwic-subslot)
+> - NIM on ISR4321/4331 -> `"0"`, `"1"`
+> - NM on Router-PT / 2811 / 2620XM / 2621XM -> `"1"`, `"2"` *(ISR G2 like 2911/2901/1941 do **not** have NM slots - use 2x HWIC-2T for 4 serials)*
+> - Cloud-PT / hosts -> `"0"`, `"1"`, ... per the device's slot map
 >
-> Integers are accepted and auto-coerced to strings, but prefer the literal string format above to match PT's slot semantics — particularly for HWIC where `"0/0"` and `0` address different slots.
+> Integers are accepted and auto-coerced to strings, but prefer the literal string format above to match PT's slot semantics - particularly for HWIC where `"0/0"` and `0` address different slots.
 
 ### ACL
 
-Apply and remove Access Control Lists on live routers via the HTTP bridge. Works independently of `pt_live_deploy` — you can add ACLs to any existing topology.
+Apply and remove Access Control Lists on live routers via the HTTP bridge. Works independently of `pt_live_deploy` - you can add ACLs to any existing topology.
 
 | Tool | Description |
 |------|-------------|
 | `pt_apply_acl` | Applies a standard, extended or named ACL to a router interface. Validates number ranges, wildcard masks, protocol/port coherence and unreachable rules before sending |
 | `pt_remove_acl` | Removes an ACL (and optionally its interface binding) from a router |
 
-> **When to use each type:** Standard ACL (1–99) — filter by source IP only. Extended ACL (100–199) — filter by source, destination, protocol and ports. Named ACL — any string identifier, easier to read and edit in IOS.
+> **When to use each type:** Standard ACL (1-99) - filter by source IP only. Extended ACL (100-199) - filter by source, destination, protocol and ports. Named ACL - any string identifier, easier to read and edit in IOS.
 
 ### NAT / PAT
 
@@ -469,9 +470,9 @@ Configure address translation on live routers via the HTTP bridge. Three modes m
 | `pt_remove_nat` | Removes NAT translation rules, pool and ACL from a router and unmarks its interfaces |
 
 > **When to use each mode:**
-> - `static` — one private IP always maps to the same public IP. Use for servers that must be reachable from the internet with a fixed address.
-> - `dynamic` — pool of public IPs assigned on demand. Use when you have more public IPs than PAT justifies but fewer than private hosts.
-> - `pat` — many private IPs share one public IP using port numbers. Use in virtually every home and enterprise network (`use_interface_overload=True` uses the WAN interface IP directly).
+> - `static` - one private IP always maps to the same public IP. Use for servers that must be reachable from the internet with a fixed address.
+> - `dynamic` - pool of public IPs assigned on demand. Use when you have more public IPs than PAT justifies but fewer than private hosts.
+> - `pat` - many private IPs share one public IP using port numbers. Use in virtually every home and enterprise network (`use_interface_overload=True` uses the WAN interface IP directly).
 
 ---
 
@@ -494,10 +495,10 @@ Configure address translation on live routers via the HTTP bridge. Three modes m
 The live deploy feature sends commands directly to a running Packet Tracer instance. No copy-pasting needed.
 
 ```
-┌──────────┐  MCP   ┌──────────────────┐  HTTP   ┌─────────────────┐  $se()  ┌──────────────┐
-│   LLM    │ ─────▶ │  MCP Server      │ ──────▶ │  PTBuilder      │ ──────▶ │ Packet Tracer│
-│ Copilot  │        │  :39000          │ :54321  │  (WebView)      │  IPC    │  (Engine)    │
-└──────────┘        └──────────────────┘         └─────────────────┘         └──────────────┘
++----------+  MCP   +------------------+  HTTP   +-----------------+  $se()  +--------------+
+|   LLM    | -----▶ |  MCP Server      | ------▶ |  PTBuilder      | ------▶ | Packet Tracer|
+| Copilot  |        |  :39000          | :54321  |  (WebView)      |  IPC    |  (Engine)    |
++----------+        +------------------+         +-----------------+         +--------------+
 ```
 
 | Port | Service | Purpose |
@@ -508,7 +509,7 @@ The live deploy feature sends commands directly to a running Packet Tracer insta
 ### Setup (once per PT session)
 
 1. Open **Cisco Packet Tracer 8.2+**
-2. Go to **Extensions → Builder Code Editor**
+2. Go to **Extensions -> Builder Code Editor**
 3. Paste this bootstrap script and click **Run**:
 
 ```javascript
@@ -538,26 +539,26 @@ This injects a `setInterval` into the PTBuilder webview that polls the bridge ev
 | `2621XM` | 2x FastEthernet | Fa0/0, Fa0/1 |
 | `2811` | 2x FastEthernet | Fa0/0, Fa0/1 |
 | `2901` | 2x GigabitEthernet | Gig0/0, Gig0/1 |
-| **`2911`** | **3x GigabitEthernet** | **Gig0/0, Gig0/1, Gig0/2 — Default** |
+| **`2911`** | **3x GigabitEthernet** | **Gig0/0, Gig0/1, Gig0/2 - Default** |
 | `819HG-4G-IOX` | 1x Gig + 1x Fa | Gig0, Fa0 |
 | `819HGW` | 1x Gig + 1x Fa | Gig0, Fa0 |
 | `829` | 2x GigabitEthernet | Gig0, Gig1 |
 | `CGR1240` | 2x GigabitEthernet | Gig0/0, Gig0/1 |
 | `ISR4321` | 2x GigabitEthernet | Gig0/0/0, Gig0/0/1 |
 | `ISR4331` | 3x GigabitEthernet | Gig0/0/0, Gig0/0/1, Gig0/0/2 |
-| `Router-PT` | 2x FastEthernet | Fa0/0, Fa0/1 — Generic |
+| `Router-PT` | 2x FastEthernet | Fa0/0, Fa0/1 - Generic |
 | `Router-PT-Empty` | none | No ports (add via modules) |
 
-> **Note:** No router has Serial ports by default. Serial requires physical HWIC or NIM modules — see [Expansion Modules](#-expansion-modules).
+> **Note:** No router has Serial ports by default. Serial requires physical HWIC or NIM modules - see [Expansion Modules](#-expansion-modules).
 
 </details>
 
-### Switches — Layer 2 (5)
+### Switches - Layer 2 (5)
 
 <details>
 <summary>Click to expand all device categories (Switches, End Devices, APs, Security, WLC, Cloud, etc.)</summary>
 
-#### Switches — Layer 2
+#### Switches - Layer 2
 
 | Model | Ports | Notes |
 |-------|-------|-------|
@@ -567,7 +568,7 @@ This injects a `setInterval` into the PTBuilder webview that polls the bridge ev
 | `Switch-PT` | 8x Fa0/0-7 | Generic |
 | `Switch-PT-Empty` | none | No ports (add via modules) |
 
-#### Switches — Layer 3 (3)
+#### Switches - Layer 3 (3)
 
 | Model | Ports | Notes |
 |-------|-------|-------|
@@ -585,7 +586,7 @@ This injects a `setInterval` into the PTBuilder webview that polls the bridge ev
 | `TabletPC-PT` | `pc` | FastEthernet0 | |
 | `SMARTPHONE-PT` | `pc` | FastEthernet0 | |
 | `Printer-PT` | `pc` | FastEthernet0 | |
-| `WirelessEndDevice-PT` | `wireless_end_device` | — | Wireless-only end device |
+| `WirelessEndDevice-PT` | `wireless_end_device` | - | Wireless-only end device |
 | `WiredEndDevice-PT` | `wired_end_device` | FastEthernet0 | |
 | `TV-PT` | `tv` | FastEthernet0 | |
 | `Home-VoIP-PT` | `voip` | FastEthernet0 | Home VoIP phone |
@@ -610,7 +611,7 @@ This injects a `setInterval` into the PTBuilder webview that polls the bridge ev
 | Model | Category | Ports | Notes |
 |-------|----------|-------|-------|
 | `5505` | `firewall` | 8x Fa0/0-Fa0/7 | Cisco ASA 5505 |
-| `5506-X` | `firewall` | 8x Gig1/0-Gig1/7 | Cisco ASA 5506-X — Default |
+| `5506-X` | `firewall` | 8x Gig1/0-Gig1/7 | Cisco ASA 5506-X - Default |
 
 #### Wireless LAN Controllers (3)
 
@@ -682,9 +683,9 @@ This injects a `setInterval` into the PTBuilder webview that polls the bridge ev
 
 | Model | Category | Ports | Notes |
 |-------|----------|-------|-------|
-| `MCU-PT` | `mcu` | — | Microcontroller (no fixed ports) |
+| `MCU-PT` | `mcu` | - | Microcontroller (no fixed ports) |
 | `SBC-PT` | `sbc` | FastEthernet0 | Single Board Computer |
-| `Thing` | `iot` | — | Generic IoT device (represents ~80 IoT types) |
+| `Thing` | `iot` | - | Generic IoT device (represents ~80 IoT types) |
 
 #### Physical Infrastructure (7)
 
@@ -694,11 +695,11 @@ This injects a `setInterval` into the PTBuilder webview that polls the bridge ev
 | `Fiber Patch Panel` | `patch_panel` | 24x Fiber | |
 | `Copper Wall Mount` | `wall_mount` | Fa0, Fa1 | |
 | `Fiber Wall Mount` | `wall_mount` | Fiber0, Fiber1 | |
-| `Power Distribution Device` | `power_dist` | — | |
+| `Power Distribution Device` | `power_dist` | - | |
 
 #### Device Aliases
 
-101 aliases total — common names the LLM can use that resolve to actual models:
+101 aliases total - common names the LLM can use that resolve to actual models:
 
 | Alias | Resolves to | Alias | Resolves to |
 |-------|-------------|-------|-------------|
@@ -738,12 +739,12 @@ The server infers the correct cable automatically from the two device categories
 |-------|---------|-------------|----------------|
 | `straight` | 8100 | Switch <-> Router, Switch <-> PC/Server/AP, Hub <-> any | Yes |
 | `cross` | 8101 | Router <-> Router, Switch <-> Switch, Router <-> Firewall | Yes |
-| `serial` | 8106 | Router Serial <-> Router Serial (requires HWIC/NIM module) | No — explicit |
-| `fiber` | 8103 | Fiber optic connections | No — explicit |
-| `console` | 8108 | PC/Laptop management access to Router/Switch | No — explicit |
-| `phone` | 8104 | VoIP phone connections | No — explicit |
+| `serial` | 8106 | Router Serial <-> Router Serial (requires HWIC/NIM module) | No - explicit |
+| `fiber` | 8103 | Fiber optic connections | No - explicit |
+| `console` | 8108 | PC/Laptop management access to Router/Switch | No - explicit |
+| `phone` | 8104 | VoIP phone connections | No - explicit |
 | `coaxial` | 8110 | Cable modems (Coaxial0 port) | Yes (modem) |
-| `auto` | 8107 | PT auto-detects the correct cable type | — |
+| `auto` | 8107 | PT auto-detects the correct cable type | - |
 
 ### Cable Inference Rules
 
@@ -800,7 +801,7 @@ addModule("R1", "0/0", "HWIC-2T");   // installs 2 serial ports in HWIC slot 0/0
 addLink("R1", "Serial0/0/0", "R2", "Serial0/0/0", "serial");
 ```
 
-### HWIC / WIC Modules — for 1941, 2901, 2911
+### HWIC / WIC Modules - for 1941, 2901, 2911
 
 <details>
 <summary>Click to expand module details (HWIC, NIM, NM, SFP, and more)</summary>
@@ -809,7 +810,7 @@ addLink("R1", "Serial0/0/0", "R2", "Serial0/0/0", "serial");
 
 | Module | Slot Type | Ports Added | Description |
 |--------|-----------|-------------|-------------|
-| `HWIC-2T` | HWIC | Serial0/0/0, Serial0/0/1 | 2-port Serial WAN — most common |
+| `HWIC-2T` | HWIC | Serial0/0/0, Serial0/0/1 | 2-port Serial WAN - most common |
 | `HWIC-4ESW` | HWIC | Fa0/1/0-Fa0/1/3 | 4-port Ethernet switch |
 | `HWIC-1GE-SFP` | HWIC | GigabitEthernet0/0/0 | 1-port GigE SFP |
 | `HWIC-AP-AG-B` | HWIC | (wireless, no physical port) | Integrated wireless AP |
@@ -817,15 +818,15 @@ addLink("R1", "Serial0/0/0", "R2", "Serial0/0/0", "serial");
 | `WIC-1T` | WIC | Serial0/0/0 | 1-port Serial |
 | `WIC-2T` | WIC | Serial0/0/0, Serial0/0/1 | 2-port Serial |
 
-#### NIM Modules — for ISR4321, ISR4331
+#### NIM Modules - for ISR4321, ISR4331
 
 | Module | Slot Type | Ports Added | Description |
 |--------|-----------|-------------|-------------|
 | `NIM-2T` | NIM | Serial0/1/0, Serial0/1/1 | 2-port Serial for ISR 4000 series |
 | `NIM-ES2-4` | NIM | Gig0/1/0-Gig0/1/3 | 4-port GE Layer 2 |
-| `NIM-Cover` | NIM | — | NIM slot cover plate |
+| `NIM-Cover` | NIM | - | NIM slot cover plate |
 
-#### NM Modules — legacy routers (14 total)
+#### NM Modules - legacy routers (14 total)
 
 | Module | Slot Type | Ports Added | Description |
 |--------|-----------|-------------|-------------|
@@ -895,7 +896,7 @@ The IP planner assigns addresses automatically. No manual configuration needed.
 - DHCP pools are created per LAN with the gateway excluded from the pool
 - DNS defaults to `8.8.8.8`
 
-**Example — 2 routers, 2 LANs:**
+**Example - 2 routers, 2 LANs:**
 ```
 LAN 1: 192.168.0.0/24  ->  R1 Gig0/0: 192.168.0.1 | PC1: 192.168.0.2 | PC2: 192.168.0.3
 LAN 2: 192.168.1.0/24  ->  R2 Gig0/0: 192.168.1.1 | PC3: 192.168.1.2 | PC4: 192.168.1.3
@@ -916,7 +917,7 @@ All 4 IGPs are fully implemented and generate real IOS commands.
 | RIP v2 | `rip` | `router rip`, `version 2`, `network {net}`, `no auto-summary` |
 | None | `none` | (no routing config generated) |
 
-**Floating static routes** (backup routes with AD=254) are supported — set `floating_routes: true` in the request.
+**Floating static routes** (backup routes with AD=254) are supported - set `floating_routes: true` in the request.
 
 Static routing uses **BFS** to compute multi-hop destination reachability, so even in topologies with 4+ routers all routes are generated correctly.
 
@@ -934,9 +935,9 @@ Templates are hints that guide the orchestrator's topology-building logic.
 | `star` | Central router + N satellite routers, each with a LAN | ospf |
 | `hub_spoke` | Hub-and-spoke topology | eigrp |
 | `branch_office` | Headquarters + branches | static |
-| `router_on_a_stick` | Inter-VLAN routing via subinterfaces | static |
+| `router_on_a_stick` | 1 router + 1 switch, 2 VLANs (override with `vlans`), 802.1Q trunk + dot1Q subinterfaces for inter-VLAN routing | connected |
 | `three_router_triangle` | Triangle of 3 routers | ospf |
-| `custom` | Free-form — no enforced structure | none |
+| `custom` | Free-form - no enforced structure | none |
 
 ---
 
@@ -944,64 +945,64 @@ Templates are hints that guide the orchestrator's topology-building logic.
 
 ```
 src/packet_tracer_mcp/
-├── adapters/
-│   └── mcp/
-│       ├── tool_registry.py       # All 30 MCP tools (@mcp.tool decorators)
-│       └── resource_registry.py   # All 5 MCP resources (@mcp.resource decorators)
-│
-├── application/
-│   ├── dto/                       # Request/Response data transfer objects
-│   └── use_cases/                 # One use case per tool (plan, validate, fix, ...)
-│
-├── domain/
-│   ├── models/
-│   │   ├── requests.py            # TopologyRequest -- input from LLM
-│   │   ├── plans.py               # TopologyPlan, DevicePlan, LinkPlan, ModulePlan
-│   │   ├── acls.py                # ACLPlan, ACLEntry, ACLBinding
-│   │   ├── nat.py                 # NATConfig, NATPool, NATStaticMapping (3 modes)
-│   │   └── errors.py              # PlanError, ErrorCode (24 codes), ValidationResult
-│   ├── services/
-│   │   ├── orchestrator.py        # Main pipeline: request -> TopologyPlan
-│   │   ├── ip_planner.py          # Assigns /24 LANs and /30 inter-router links
-│   │   ├── validator.py           # Validates models, ports, cables, IPs
-│   │   ├── auto_fixer.py          # Fixes cables, upgrades routers, reassigns ports
-│   │   ├── explainer.py           # Natural-language plan explanation
-│   │   └── estimator.py           # Dry-run device/link/config count estimation
-│   └── rules/
-│       ├── device_rules.py        # Validates device models against catalog
-│       ├── cable_rules.py         # Validates cable types and port conflicts
-│       ├── ip_rules.py            # Validates IP uniqueness and subnet conflicts
-│       ├── acl_rules.py           # Validates ACL entries, numbers, wildcards
-│       └── nat_rules.py           # Validates NAT IPs, pool ranges, interface coherence
-│
-├── infrastructure/
-│   ├── catalog/
-│   │   ├── devices.py             # 74 DeviceModel definitions across 34 categories
-│   │   ├── modules.py             # 151 expansion module specs (NM, HWIC, NIM, WIC, SFP...)
-│   │   ├── cables.py              # 15 cable types, PT codes, 88 inference rules
-│   │   ├── aliases.py             # 101 model name aliases
-│   │   └── templates.py           # 9 topology template definitions
-│   ├── generator/
-│   │   ├── ptbuilder_generator.py  # Generates addDevice/addModule/addLink JS
-│   │   ├── cli_config_generator.py # Generates IOS CLI blocks (DHCP, routing, ...)
-│   │   ├── acl_cli_generator.py    # Generates access-list / ip access-group CLI
-│   │   └── nat_cli_generator.py    # Generates ip nat inside/outside / pool / overload CLI
-│   ├── execution/
-│   │   ├── live_bridge.py         # PTCommandBridge HTTP server (:54321)
-│   │   ├── live_executor.py       # Converts TopologyPlan -> JS commands -> bridge
-│   │   ├── deploy_executor.py     # Clipboard deploy + manual instructions
-│   │   └── manual_executor.py     # File export executor
-│   └── persistence/
-│       └── project_repository.py  # Save/load TopologyPlan as JSON projects
-│
-├── shared/
-│   ├── enums.py                   # RoutingProtocol, DeviceCategory, CableType, ...
-│   ├── constants.py               # Defaults, layout values, capabilities
-│   └── utils.py                   # prefix_to_mask and other helpers
-│
-├── server.py                      # FastMCP instance, registers tools/resources
-├── settings.py                    # Server config (version, host, port)
-└── __main__.py                    # python -m packet_tracer_mcp entry point
++-- adapters/
+|   +-- mcp/
+|       +-- tool_registry.py       # All 30 MCP tools (@mcp.tool decorators)
+|       +-- resource_registry.py   # All 5 MCP resources (@mcp.resource decorators)
+|
++-- application/
+|   +-- dto/                       # Request/Response data transfer objects
+|   +-- use_cases/                 # One use case per tool (plan, validate, fix, ...)
+|
++-- domain/
+|   +-- models/
+|   |   +-- requests.py            # TopologyRequest -- input from LLM
+|   |   +-- plans.py               # TopologyPlan, DevicePlan, LinkPlan, ModulePlan
+|   |   +-- acls.py                # ACLPlan, ACLEntry, ACLBinding
+|   |   +-- nat.py                 # NATConfig, NATPool, NATStaticMapping (3 modes)
+|   |   +-- errors.py              # PlanError, ErrorCode (24 codes), ValidationResult
+|   +-- services/
+|   |   +-- orchestrator.py        # Main pipeline: request -> TopologyPlan
+|   |   +-- ip_planner.py          # Assigns /24 LANs and /30 inter-router links
+|   |   +-- validator.py           # Validates models, ports, cables, IPs
+|   |   +-- auto_fixer.py          # Fixes cables, upgrades routers, reassigns ports
+|   |   +-- explainer.py           # Natural-language plan explanation
+|   |   +-- estimator.py           # Dry-run device/link/config count estimation
+|   +-- rules/
+|       +-- device_rules.py        # Validates device models against catalog
+|       +-- cable_rules.py         # Validates cable types and port conflicts
+|       +-- ip_rules.py            # Validates IP uniqueness and subnet conflicts
+|       +-- acl_rules.py           # Validates ACL entries, numbers, wildcards
+|       +-- nat_rules.py           # Validates NAT IPs, pool ranges, interface coherence
+|
++-- infrastructure/
+|   +-- catalog/
+|   |   +-- devices.py             # 74 DeviceModel definitions across 34 categories
+|   |   +-- modules.py             # 151 expansion module specs (NM, HWIC, NIM, WIC, SFP...)
+|   |   +-- cables.py              # 15 cable types, PT codes, 88 inference rules
+|   |   +-- aliases.py             # 101 model name aliases
+|   |   +-- templates.py           # 9 topology template definitions
+|   +-- generator/
+|   |   +-- ptbuilder_generator.py  # Generates addDevice/addModule/addLink JS
+|   |   +-- cli_config_generator.py # Generates IOS CLI blocks (DHCP, routing, ...)
+|   |   +-- acl_cli_generator.py    # Generates access-list / ip access-group CLI
+|   |   +-- nat_cli_generator.py    # Generates ip nat inside/outside / pool / overload CLI
+|   +-- execution/
+|   |   +-- live_bridge.py         # PTCommandBridge HTTP server (:54321)
+|   |   +-- live_executor.py       # Converts TopologyPlan -> JS commands -> bridge
+|   |   +-- deploy_executor.py     # Clipboard deploy + manual instructions
+|   |   +-- manual_executor.py     # File export executor
+|   +-- persistence/
+|       +-- project_repository.py  # Save/load TopologyPlan as JSON projects
+|
++-- shared/
+|   +-- enums.py                   # RoutingProtocol, DeviceCategory, CableType, ...
+|   +-- constants.py               # Defaults, layout values, capabilities
+|   +-- utils.py                   # prefix_to_mask and other helpers
+|
++-- server.py                      # FastMCP instance, registers tools/resources
++-- settings.py                    # Server config (version, host, port)
++-- __main__.py                    # python -m packet_tracer_mcp entry point
 ```
 
 ---
@@ -1042,7 +1043,7 @@ python -m pytest tests/test_full_build.py::TestFullBuild::test_basic_2_routers -
 | Pydantic | 2.0+ | |
 | FastMCP / mcp[cli] | 1.0+ | |
 | Cisco Packet Tracer | 8.2+ | For live deploy only |
-| PTBuilder extension | — | Built into PT 8.2+, required for live deploy |
+| PTBuilder extension | - | Built into PT 8.2+, required for live deploy |
 
 ---
 
@@ -1076,17 +1077,17 @@ Generated:  8x addDevice, 7x addLink, 2x configureIosDevice, 4x configurePcIp
 
 ## License
 
-This project is licensed under the **[MIT License](LICENSE)** — free to use, fork, and modify.
+This project is licensed under the **[MIT License](LICENSE)** - free to use, fork, and modify.
 
 ```
-MIT License (2026) · Mateo
+MIT License (2026) - Mateo
 Feel free to clone, modify, and use locally without restrictions.
 Contributions welcome!
 ```
 
 <div align="center">
 
-**Built with [MCP](https://modelcontextprotocol.io) · Powered by [Pydantic](https://docs.pydantic.dev) · Deploys to [Cisco Packet Tracer](https://www.netacad.com/resources/lab-downloads)**
+**Built with [MCP](https://modelcontextprotocol.io) - Powered by [Pydantic](https://docs.pydantic.dev) - Deploys to [Cisco Packet Tracer](https://www.netacad.com/resources/lab-downloads)**
 
 If this project is useful to you, star it and share it with the community ⭐
 

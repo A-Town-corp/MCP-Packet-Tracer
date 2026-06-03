@@ -1,66 +1,66 @@
 # packet_tracer_mcp
 
-Módulo principal del servidor MCP para Cisco Packet Tracer.
+Main module of the MCP server for Cisco Packet Tracer.
 
-## Arquitectura
+## Architecture
 
-Sigue **Clean Architecture / Domain-Driven Design** con separación clara de capas:
+Follows **Clean Architecture / Domain-Driven Design** with a clear separation of layers:
 
 ```
 packet_tracer_mcp/
-├── adapters/mcp/       → Capa de protocolo MCP (tools + resources)
-├── application/        → Casos de uso + DTOs (entrada/salida)
-├── domain/             → Lógica de negocio pura
-│   ├── models/         → Modelos de datos (Plan, Request, Error)
-│   ├── services/       → Servicios (Orchestrator, IPPlanner, Validator...)
-│   └── rules/          → Reglas de validación (dispositivos, cables, IPs)
-├── infrastructure/     → Preocupaciones externas
-│   ├── catalog/        → Catálogo de dispositivos, cables, templates
-│   ├── generator/      → Generadores de scripts PTBuilder + CLI configs
-│   ├── execution/      → Estrategias de despliegue (manual, live bridge)
-│   └── persistence/    → Persistencia de proyectos
-├── shared/             → Enums, constantes, utilidades
-├── server.py           → Punto de entrada MCP
-├── settings.py         → Configuración global
-└── __main__.py         → Entry point: python -m packet_tracer_mcp
++-- adapters/mcp/       -> MCP protocol layer (tools + resources)
++-- application/        -> Use cases + DTOs (input/output)
++-- domain/             -> Pure business logic
+|   +-- models/         -> Data models (Plan, Request, Error)
+|   +-- services/       -> Services (Orchestrator, IPPlanner, Validator...)
+|   +-- rules/          -> Validation rules (devices, cables, IPs)
++-- infrastructure/     -> External concerns
+|   +-- catalog/        -> Catalog of devices, cables, templates
+|   +-- generator/      -> PTBuilder script + CLI config generators
+|   +-- execution/      -> Deployment strategies (manual, live bridge)
+|   +-- persistence/    -> Project persistence
++-- shared/             -> Enums, constants, utilities
++-- server.py           -> MCP entry point
++-- settings.py         -> Global configuration
++-- __main__.py         -> Entry point: python -m packet_tracer_mcp
 ```
 
-## Flujo de datos
+## Data flow
 
 ```
-Request → TopologyRequest → Orchestrator → TopologyPlan → Validator
-                                                ↓
+Request -> TopologyRequest -> Orchestrator -> TopologyPlan -> Validator
+                                                v
                                     Generator (PTBuilder JS + CLI configs)
-                                                ↓
+                                                v
                                     Executor (Manual / Deploy / Live Bridge)
 ```
 
-## Archivos raíz
+## Root files
 
-| Archivo | Propósito |
+| File | Purpose |
 |---------|-----------|
-| `server.py` | Crea la instancia `FastMCP`, registra tools/resources, arranca en HTTP (:39000) o stdio |
-| `__main__.py` | Entry point para `python -m packet_tracer_mcp` — invoca `server.main()` |
-| `settings.py` | Constantes globales: `VERSION` (0.4.0), `SERVER_NAME`, `SERVER_INSTRUCTIONS` |
+| `server.py` | Creates the `FastMCP` instance, registers tools/resources, starts over HTTP (:39000) or stdio |
+| `__main__.py` | Entry point for `python -m packet_tracer_mcp` - invokes `server.main()` |
+| `settings.py` | Global constants: `VERSION` (0.4.0), `SERVER_NAME`, `SERVER_INSTRUCTIONS` |
 
-## Ejecución
+## Execution
 
 ```bash
-# Streamable HTTP (default, puerto 39000)
+# Streamable HTTP (default, port 39000)
 python -m packet_tracer_mcp
 
-# Modo stdio (debug/legacy)
+# stdio mode (debug/legacy)
 python -m packet_tracer_mcp --stdio
 ```
 
-## Dependencias entre capas
+## Dependencies between layers
 
 ```
-adapters/mcp → application/use_cases → domain/services → domain/models
-                                              ↓
+adapters/mcp -> application/use_cases -> domain/services -> domain/models
+                                              v
                                     infrastructure/ (catalog, generator, execution)
-                                              ↓
+                                              v
                                          shared/ (enums, constants, utils)
 ```
 
-Sin dependencias circulares. La capa `domain` nunca importa de `infrastructure` directamente — la comunicación es a través de las interfaces.
+No circular dependencies. The `domain` layer never imports from `infrastructure` directly - communication happens through interfaces.
