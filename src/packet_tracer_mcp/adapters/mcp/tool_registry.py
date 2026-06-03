@@ -36,7 +36,22 @@ from ...application.use_cases.apply_features import (
     add_static_routes_uc,
     apply_dhcp_relay_uc,
     apply_ipv6_uc,
+    apply_raw_ios_uc,
+    apply_ospf_uc,
+    apply_rip_uc,
+    apply_eigrp_uc,
+    apply_bgp_uc,
+    apply_device_security_uc,
+    apply_management_uc,
+    apply_stp_uc,
+    apply_vtp_uc,
+    create_vlans_uc,
+    configure_interface_uc,
+    apply_loopback_uc,
+    configure_serial_uc,
+    apply_gre_tunnel_uc,
 )
+from ...application.use_cases._bridge_apply import parse_ok
 from ...infrastructure.generator.ptbuilder_generator import (
     generate_ptbuilder_script,
     generate_full_script,
@@ -2235,3 +2250,600 @@ def register_tools(mcp: FastMCP) -> None:
         except (ValueError, KeyError, TypeError) as exc:
             return json.dumps({"error": f"Invalid IPv6 input: {exc}"}, indent=2, ensure_ascii=False)
         return _feature_response("IPv6 dual-stack", device, device, result, dry_run, bridge_ok)
+
+    # ------------------------------------------------------------------
+    # UNIVERSAL ESCAPE HATCH + END DEVICES
+    # ------------------------------------------------------------------
+    @mcp.tool()
+    def pt_apply_ios(
+        device: str,
+        config_lines: list[str],
+        dry_run: bool = False,
+    ) -> str:
+        """
+        Apply ARBITRARY Cisco IOS configuration to any router or switch.
+
+        The universal tool: anything you can type at a Cisco CLI in global
+        config mode is reachable here, even features without a dedicated tool
+        (QoS, route-maps, prefix-lists, zone-based firewall, IP SLA, etc.).
+        The lines are wrapped with enable / configure terminal / ... / end /
+        write memory automatically, sent through the bridge, and the result is
+        confirmed (applied=true means PT accepted it).
+
+        Parameters:
+        - device: device name in PT (use pt_query_topology).
+        - config_lines: IOS commands WITHOUT the enable/conf t/end wrapper.
+          Use a single leading space for sub-mode commands and " exit" to leave
+          a block, e.g.:
+            ["interface GigabitEthernet0/0",
+             " ip address 10.0.0.1 255.255.255.0",
+             " no shutdown",
+             " exit"]
+        - dry_run: validate + return the wrapped CLI without sending.
+
+        Prefer a dedicated tool (pt_apply_ospf, pt_apply_device_security, ...)
+        when one exists - it validates input. Use this for everything else.
+        """
+        bridge_ok = _ensure_bridge() and _bridge_pt_connected()
+        if bridge_ok:
+            _ensure_pt_patches()
+        confirm_fn = _bridge_send_and_wait if bridge_ok and not dry_run else None
+        try:
+            result = apply_raw_ios_uc(device, config_lines, confirm_send=confirm_fn, dry_run=dry_run)
+        except (ValueError, KeyError, TypeError) as exc:
+            return json.dumps({"error": f"Invalid IOS input: {exc}"}, indent=2, ensure_ascii=False)
+        return _feature_response("IOS config", f"{len(result['cli_lines'])} lines", device, result, dry_run, bridge_ok)
+
+    @mcp.tool()
+    def pt_configure_pc(
+        device: str,
+        ip: str | None = None,
+        mask: str | None = None,
+        gateway: str | None = None,
+        dns: str | None = None,
+        dhcp: bool | None = None,
+        dry_run: bool = False,
+    ) -> str:
+        """
+        Configure an end device (PC / Laptop / Server) FastEthernet0 interface.
+
+        Sets a static IPv4 address (or turns DHCP on/off) plus the default
+        gateway and DNS server - the IP Configuration panel you would normally
+        fill in by hand in PT. Applied through the GUI object model (not IOS),
+        and confirmed.
+
+        Parameters:
+        - device: end-device name in PT (use pt_query_topology).
+        - ip / mask: static IPv4 address + dotted-decimal mask. Provide BOTH.
+        - gateway: default gateway IP (optional).
+        - dns: DNS server IP (optional).
+        - dhcp: True = enable DHCP, False = disable (static). When True you
+          normally omit ip/mask.
+        - dry_run: build the call without sending.
+
+        Provide at least dhcp=True, or both ip and mask.
+        """
+        if dhcp is not True and not (ip and mask):
+            return json.dumps(
+                {"error": "Provide dhcp=True, or both ip and mask."}, indent=2, ensure_ascii=False)
+
+        parts = [f"var d = ipc.network().getDevice({json.dumps(device)});"]
+        parts.append('if(!d){reportResult(JSON.stringify({ok:false,error:"no device"}));}else{')
+        parts.append('var p=d.getPort("FastEthernet0");')
+        parts.append('if(!p){reportResult(JSON.stringify({ok:false,error:"no port"}));}else{')
+        if dhcp is not None:
+            parts.append(
+                f'if(typeof d.setDhcpFlag==="function"){{d.setDhcpFlag({"true" if dhcp else "false"});}}')
+        if ip and mask:
+            parts.append(f'p.setIpSubnetMask({json.dumps(ip)},{json.dumps(mask)});')
+        if gateway:
+            parts.append(f'p.setDefaultGateway({json.dumps(gateway)});')
+        if dns:
+            parts.append(f'p.setDnsServerIp({json.dumps(dns)});')
+        parts.append('reportResult(JSON.stringify({ok:true}));}}')
+        js = "".join(parts)
+
+        bridge_ok = _ensure_bridge() and _bridge_pt_connected()
+        if bridge_ok:
+            _ensure_pt_patches()
+        sent = False
+        applied: bool | None = None
+        if bridge_ok and not dry_run:
+            res = _bridge_send_and_wait(js, timeout=8.0)
+            sent = res is not None
+            applied = parse_ok(res)
+        setting = "DHCP" if dhcp else (ip or "static")
+        summary = _apply_summary("PC IP config", setting, device,
+                                 {"applied": applied, "sent": sent}, dry_run, bridge_ok)
+        return json.dumps({
+            "summary": "\n".join(summary),
+            "js_payload": js,
+            "sent": sent,
+            "applied": applied,
+            "dry_run": dry_run,
+        }, indent=2, ensure_ascii=False)
+
+    # ------------------------------------------------------------------
+    # ROUTING PROTOCOLS (apply to an existing device)
+    # ------------------------------------------------------------------
+    @mcp.tool()
+    def pt_apply_ospf(
+        router: str,
+        process_id: int,
+        networks: list[dict],
+        router_id: str | None = None,
+        passive_interfaces: list[str] | None = None,
+        default_originate: bool = False,
+        dry_run: bool = False,
+    ) -> str:
+        """
+        Enable OSPF on an existing router (single or multi-area).
+
+        Parameters:
+        - router: device name in PT.
+        - process_id: OSPF process id (1-65535).
+        - networks: list of dicts, one per advertised network:
+            {"network": "10.0.0.0", "wildcard": "0.0.0.255", "area": 0}
+          (use wildcard masks, not subnet masks). Different "area" values give
+          you a multi-area design.
+        - router_id: optional explicit router-id (e.g. "1.1.1.1").
+        - passive_interfaces: interfaces that should not form adjacencies
+            (e.g. ["GigabitEthernet0/1"]).
+        - default_originate: inject a default route into OSPF.
+        - dry_run: validate + return the CLI without sending.
+        """
+        bridge_ok = _ensure_bridge() and _bridge_pt_connected()
+        if bridge_ok:
+            _ensure_pt_patches()
+        confirm_fn = _bridge_send_and_wait if bridge_ok and not dry_run else None
+        try:
+            result = apply_ospf_uc(router, process_id, networks, router_id=router_id,
+                                   passive_interfaces=passive_interfaces,
+                                   default_originate=default_originate,
+                                   confirm_send=confirm_fn, dry_run=dry_run)
+        except (ValueError, KeyError, TypeError) as exc:
+            return json.dumps({"error": f"Invalid OSPF input: {exc}"}, indent=2, ensure_ascii=False)
+        return _feature_response("OSPF", f"process {process_id}", router, result, dry_run, bridge_ok)
+
+    @mcp.tool()
+    def pt_apply_rip(
+        router: str,
+        networks: list[str],
+        version: int = 2,
+        no_auto_summary: bool = True,
+        passive_interfaces: list[str] | None = None,
+        default_originate: bool = False,
+        dry_run: bool = False,
+    ) -> str:
+        """
+        Enable RIP (default RIPv2) on an existing router.
+
+        Parameters:
+        - router: device name in PT.
+        - networks: list of classful network strings, e.g. ["10.0.0.0", "192.168.1.0"].
+        - version: 1 or 2 (default 2).
+        - no_auto_summary: disable classful auto-summarization (default True; the
+          usual RIPv2 best practice).
+        - passive_interfaces / default_originate: optional, as in OSPF.
+        - dry_run: validate + return the CLI without sending.
+        """
+        bridge_ok = _ensure_bridge() and _bridge_pt_connected()
+        if bridge_ok:
+            _ensure_pt_patches()
+        confirm_fn = _bridge_send_and_wait if bridge_ok and not dry_run else None
+        try:
+            result = apply_rip_uc(router, networks, version=version,
+                                  no_auto_summary=no_auto_summary,
+                                  passive_interfaces=passive_interfaces,
+                                  default_originate=default_originate,
+                                  confirm_send=confirm_fn, dry_run=dry_run)
+        except (ValueError, KeyError, TypeError) as exc:
+            return json.dumps({"error": f"Invalid RIP input: {exc}"}, indent=2, ensure_ascii=False)
+        return _feature_response("RIP", f"v{version}", router, result, dry_run, bridge_ok)
+
+    @mcp.tool()
+    def pt_apply_eigrp(
+        router: str,
+        as_number: int,
+        networks: list,
+        no_auto_summary: bool = True,
+        router_id: str | None = None,
+        passive_interfaces: list[str] | None = None,
+        dry_run: bool = False,
+    ) -> str:
+        """
+        Enable EIGRP on an existing router.
+
+        Parameters:
+        - router: device name in PT.
+        - as_number: EIGRP autonomous-system number (1-65535) - must match on
+          all neighbors.
+        - networks: each item is EITHER a classful string ("10.0.0.0") OR a dict
+          with a wildcard {"network": "10.0.0.0", "wildcard": "0.0.0.255"}.
+        - no_auto_summary: disable auto-summarization (default True).
+        - router_id: optional explicit EIGRP router-id.
+        - passive_interfaces: optional.
+        - dry_run: validate + return the CLI without sending.
+        """
+        bridge_ok = _ensure_bridge() and _bridge_pt_connected()
+        if bridge_ok:
+            _ensure_pt_patches()
+        confirm_fn = _bridge_send_and_wait if bridge_ok and not dry_run else None
+        try:
+            result = apply_eigrp_uc(router, as_number, networks, no_auto_summary=no_auto_summary,
+                                    router_id=router_id, passive_interfaces=passive_interfaces,
+                                    confirm_send=confirm_fn, dry_run=dry_run)
+        except (ValueError, KeyError, TypeError) as exc:
+            return json.dumps({"error": f"Invalid EIGRP input: {exc}"}, indent=2, ensure_ascii=False)
+        return _feature_response("EIGRP", f"AS {as_number}", router, result, dry_run, bridge_ok)
+
+    @mcp.tool()
+    def pt_apply_bgp(
+        router: str,
+        as_number: int,
+        router_id: str | None = None,
+        neighbors: list[dict] | None = None,
+        networks: list[dict] | None = None,
+        dry_run: bool = False,
+    ) -> str:
+        """
+        Enable BGP on an existing router.
+
+        Parameters:
+        - router: device name in PT.
+        - as_number: local BGP AS (1-65535).
+        - router_id: optional explicit BGP router-id.
+        - neighbors: list of dicts:
+            {"ip": "10.0.0.2", "remote_as": 65002, "description": "ISP" (optional)}
+        - networks: list of dicts advertised with the mask keyword:
+            {"network": "192.168.1.0", "mask": "255.255.255.0"}
+        - dry_run: validate + return the CLI without sending.
+
+        Provide at least one neighbor or one network.
+        """
+        bridge_ok = _ensure_bridge() and _bridge_pt_connected()
+        if bridge_ok:
+            _ensure_pt_patches()
+        confirm_fn = _bridge_send_and_wait if bridge_ok and not dry_run else None
+        try:
+            result = apply_bgp_uc(router, as_number, router_id=router_id,
+                                  neighbors=neighbors, networks=networks,
+                                  confirm_send=confirm_fn, dry_run=dry_run)
+        except (ValueError, KeyError, TypeError) as exc:
+            return json.dumps({"error": f"Invalid BGP input: {exc}"}, indent=2, ensure_ascii=False)
+        return _feature_response("BGP", f"AS {as_number}", router, result, dry_run, bridge_ok)
+
+    # ------------------------------------------------------------------
+    # DEVICE MANAGEMENT / HARDENING
+    # ------------------------------------------------------------------
+    @mcp.tool()
+    def pt_apply_device_security(
+        device: str,
+        hostname: str | None = None,
+        enable_secret: str | None = None,
+        console_password: str | None = None,
+        vty_password: str | None = None,
+        ssh: dict | None = None,
+        banner_motd: str | None = None,
+        service_password_encryption: bool = False,
+        domain_name: str | None = None,
+        dry_run: bool = False,
+    ) -> str:
+        """
+        Harden a device: passwords, SSH, banner, enable secret.
+
+        Parameters (all optional, but provide at least one):
+        - hostname: set the device hostname.
+        - enable_secret: privileged-EXEC secret.
+        - console_password: password on line console 0 (+ login).
+        - vty_password: password on the vty lines (+ login). Ignored if `ssh`
+          is given (SSH configures the vty lines for login local instead).
+        - ssh: enable SSH. Dict:
+            {"domain": "lab.local", "username": "admin", "password": "cisco",
+             "version": 2 (optional), "modulus": 1024 (optional)}
+          Emits ip domain-name, username, crypto key generate rsa, ip ssh
+          version, and 'line vty 0 15 / transport input ssh / login local'.
+        - banner_motd: message-of-the-day banner text.
+        - service_password_encryption: scramble plaintext passwords.
+        - domain_name: ip domain-name (when not already set via ssh).
+        - dry_run: validate + return the CLI without sending.
+        """
+        bridge_ok = _ensure_bridge() and _bridge_pt_connected()
+        if bridge_ok:
+            _ensure_pt_patches()
+        confirm_fn = _bridge_send_and_wait if bridge_ok and not dry_run else None
+        try:
+            result = apply_device_security_uc(
+                device, hostname=hostname, enable_secret=enable_secret,
+                console_password=console_password, vty_password=vty_password, ssh=ssh,
+                banner_motd=banner_motd, service_password_encryption=service_password_encryption,
+                domain_name=domain_name, confirm_send=confirm_fn, dry_run=dry_run)
+        except (ValueError, KeyError, TypeError) as exc:
+            return json.dumps({"error": f"Invalid device-security input: {exc}"}, indent=2, ensure_ascii=False)
+        return _feature_response("Device hardening", device, device, result, dry_run, bridge_ok)
+
+    @mcp.tool()
+    def pt_apply_management(
+        device: str,
+        ntp_servers: list[str] | None = None,
+        snmp: dict | None = None,
+        logging_hosts: list[str] | None = None,
+        clock_timezone: dict | None = None,
+        dry_run: bool = False,
+    ) -> str:
+        """
+        Configure management services: NTP, SNMP, syslog, clock timezone.
+
+        Parameters (provide at least one):
+        - ntp_servers: list of NTP server IPs.
+        - snmp: dict {"community": "public", "access": "ro"|"rw",
+                       "location": "...", "contact": "..."}.
+        - logging_hosts: syslog server IPs (ip logging host ...).
+        - clock_timezone: {"name": "PST", "offset": -8}.
+        - dry_run: validate + return the CLI without sending.
+        """
+        bridge_ok = _ensure_bridge() and _bridge_pt_connected()
+        if bridge_ok:
+            _ensure_pt_patches()
+        confirm_fn = _bridge_send_and_wait if bridge_ok and not dry_run else None
+        try:
+            result = apply_management_uc(device, ntp_servers=ntp_servers, snmp=snmp,
+                                         logging_hosts=logging_hosts, clock_timezone=clock_timezone,
+                                         confirm_send=confirm_fn, dry_run=dry_run)
+        except (ValueError, KeyError, TypeError) as exc:
+            return json.dumps({"error": f"Invalid management input: {exc}"}, indent=2, ensure_ascii=False)
+        return _feature_response("Management services", device, device, result, dry_run, bridge_ok)
+
+    # ------------------------------------------------------------------
+    # SWITCHING: STP / VTP / VLANs
+    # ------------------------------------------------------------------
+    @mcp.tool()
+    def pt_apply_stp(
+        switch: str,
+        mode: str | None = None,
+        vlan_root: list[dict] | None = None,
+        portfast_interfaces: list[str] | None = None,
+        bpduguard_interfaces: list[str] | None = None,
+        portfast_default: bool = False,
+        bpduguard_default: bool = False,
+        dry_run: bool = False,
+    ) -> str:
+        """
+        Configure Spanning Tree Protocol on a switch.
+
+        Parameters (provide at least one):
+        - mode: "pvst" or "rapid-pvst".
+        - vlan_root: list of dicts to set the root bridge / priority per VLAN:
+            {"vlan": 10, "role": "primary"|"secondary"} or
+            {"vlan": 10, "priority": 4096}  (priority must be a multiple of 4096).
+        - portfast_interfaces: access ports to put into PortFast.
+        - bpduguard_interfaces: ports to protect with BPDU Guard.
+        - portfast_default: enable PortFast on all access ports globally.
+        - bpduguard_default: enable BPDU Guard on all PortFast ports globally.
+        - dry_run: validate + return the CLI without sending.
+        """
+        bridge_ok = _ensure_bridge() and _bridge_pt_connected()
+        if bridge_ok:
+            _ensure_pt_patches()
+        confirm_fn = _bridge_send_and_wait if bridge_ok and not dry_run else None
+        try:
+            result = apply_stp_uc(switch, mode=mode, vlan_root=vlan_root,
+                                  portfast_interfaces=portfast_interfaces,
+                                  bpduguard_interfaces=bpduguard_interfaces,
+                                  portfast_default=portfast_default,
+                                  bpduguard_default=bpduguard_default,
+                                  confirm_send=confirm_fn, dry_run=dry_run)
+        except (ValueError, KeyError, TypeError) as exc:
+            return json.dumps({"error": f"Invalid STP input: {exc}"}, indent=2, ensure_ascii=False)
+        return _feature_response("Spanning Tree", switch, switch, result, dry_run, bridge_ok)
+
+    @mcp.tool()
+    def pt_apply_vtp(
+        switch: str,
+        mode: str,
+        domain: str | None = None,
+        password: str | None = None,
+        version: int | None = None,
+        dry_run: bool = False,
+    ) -> str:
+        """
+        Configure VTP (VLAN Trunking Protocol) on a switch.
+
+        Parameters:
+        - switch: device name in PT.
+        - mode: "server", "client", "transparent" or "off".
+        - domain: VTP domain name (must match across the VTP domain).
+        - password: optional VTP password.
+        - version: optional VTP version (1, 2 or 3).
+        - dry_run: validate + return the CLI without sending.
+        """
+        bridge_ok = _ensure_bridge() and _bridge_pt_connected()
+        if bridge_ok:
+            _ensure_pt_patches()
+        confirm_fn = _bridge_send_and_wait if bridge_ok and not dry_run else None
+        try:
+            result = apply_vtp_uc(switch, mode, domain=domain, password=password,
+                                  version=version, confirm_send=confirm_fn, dry_run=dry_run)
+        except (ValueError, KeyError, TypeError) as exc:
+            return json.dumps({"error": f"Invalid VTP input: {exc}"}, indent=2, ensure_ascii=False)
+        return _feature_response("VTP", mode, switch, result, dry_run, bridge_ok)
+
+    @mcp.tool()
+    def pt_create_vlans(
+        switch: str,
+        vlans: list[dict],
+        dry_run: bool = False,
+    ) -> str:
+        """
+        Create VLANs in a switch's VLAN database (with optional names).
+
+        Standalone VLAN creation - separate from SVIs/trunks. For inter-VLAN
+        routing use pt_apply_svi; for trunk allowed-lists use
+        pt_configure_etherchannel or pt_apply_ios.
+
+        Parameters:
+        - switch: device name in PT.
+        - vlans: list of dicts {"vlan_id": 10, "name": "SALES" (optional)}.
+        - dry_run: validate + return the CLI without sending.
+        """
+        bridge_ok = _ensure_bridge() and _bridge_pt_connected()
+        if bridge_ok:
+            _ensure_pt_patches()
+        confirm_fn = _bridge_send_and_wait if bridge_ok and not dry_run else None
+        try:
+            result = create_vlans_uc(switch, vlans, confirm_send=confirm_fn, dry_run=dry_run)
+        except (ValueError, KeyError, TypeError) as exc:
+            return json.dumps({"error": f"Invalid VLAN input: {exc}"}, indent=2, ensure_ascii=False)
+        return _feature_response("VLAN database", f"{len(vlans)} vlans", switch, result, dry_run, bridge_ok)
+
+    # ------------------------------------------------------------------
+    # INTERFACES / WAN
+    # ------------------------------------------------------------------
+    @mcp.tool()
+    def pt_configure_interface(
+        device: str,
+        interface: str,
+        ip: str | None = None,
+        mask: str | None = None,
+        description: str | None = None,
+        shutdown: bool | None = None,
+        speed: str | None = None,
+        duplex: str | None = None,
+        mtu: int | None = None,
+        no_switchport: bool = False,
+        dry_run: bool = False,
+    ) -> str:
+        """
+        Configure a generic interface: IP, description, admin state, speed.
+
+        Works on any router/switch interface. For SVIs use pt_apply_svi, for
+        EtherChannel use pt_configure_etherchannel, for serial/WAN use
+        pt_configure_serial.
+
+        Parameters:
+        - device / interface: e.g. "R1" / "GigabitEthernet0/0".
+        - ip + mask: provide BOTH to set an IPv4 address.
+        - description: interface description text.
+        - shutdown: True = shut, False = no shutdown, omit = leave as-is.
+        - speed / duplex: e.g. "100" / "full".
+        - mtu: interface MTU.
+        - no_switchport: turn a switchport into a routed (L3) port first.
+        - dry_run: validate + return the CLI without sending.
+        """
+        bridge_ok = _ensure_bridge() and _bridge_pt_connected()
+        if bridge_ok:
+            _ensure_pt_patches()
+        confirm_fn = _bridge_send_and_wait if bridge_ok and not dry_run else None
+        try:
+            result = configure_interface_uc(device, interface, ip=ip, mask=mask,
+                                            description=description, shutdown=shutdown,
+                                            speed=speed, duplex=duplex, mtu=mtu,
+                                            no_switchport=no_switchport,
+                                            confirm_send=confirm_fn, dry_run=dry_run)
+        except (ValueError, KeyError, TypeError) as exc:
+            return json.dumps({"error": f"Invalid interface input: {exc}"}, indent=2, ensure_ascii=False)
+        return _feature_response("Interface config", interface, device, result, dry_run, bridge_ok)
+
+    @mcp.tool()
+    def pt_apply_loopback(
+        device: str,
+        number: int,
+        ip: str,
+        mask: str,
+        description: str | None = None,
+        dry_run: bool = False,
+    ) -> str:
+        """
+        Create a Loopback interface with an IP address.
+
+        Parameters:
+        - device: router name in PT.
+        - number: loopback number (e.g. 0 -> interface Loopback0).
+        - ip + mask: the loopback address (often a /32, e.g. "1.1.1.1" /
+          "255.255.255.255" for a router-id).
+        - description: optional.
+        - dry_run: validate + return the CLI without sending.
+        """
+        bridge_ok = _ensure_bridge() and _bridge_pt_connected()
+        if bridge_ok:
+            _ensure_pt_patches()
+        confirm_fn = _bridge_send_and_wait if bridge_ok and not dry_run else None
+        try:
+            result = apply_loopback_uc(device, number, ip, mask, description=description,
+                                       confirm_send=confirm_fn, dry_run=dry_run)
+        except (ValueError, KeyError, TypeError) as exc:
+            return json.dumps({"error": f"Invalid loopback input: {exc}"}, indent=2, ensure_ascii=False)
+        return _feature_response("Loopback", f"Loopback{number}", device, result, dry_run, bridge_ok)
+
+    @mcp.tool()
+    def pt_configure_serial(
+        device: str,
+        interface: str,
+        encapsulation: str | None = None,
+        clock_rate: int | None = None,
+        ip: str | None = None,
+        mask: str | None = None,
+        ppp_auth: str | None = None,
+        username: str | None = None,
+        password: str | None = None,
+        dry_run: bool = False,
+    ) -> str:
+        """
+        Configure a serial / WAN interface (HDLC, PPP, Frame Relay).
+
+        Parameters:
+        - device / interface: e.g. "R1" / "Serial0/0/0".
+        - encapsulation: "ppp", "hdlc" or "frame-relay".
+        - clock_rate: DCE clock rate in bps (e.g. 64000) on the DCE end.
+        - ip + mask: IPv4 address (provide both).
+        - ppp_auth: "chap" or "pap" (PPP only).
+        - username + password: the PEER's credentials for PPP authentication
+          (emitted as a global 'username ... password ...').
+        - dry_run: validate + return the CLI without sending.
+        """
+        bridge_ok = _ensure_bridge() and _bridge_pt_connected()
+        if bridge_ok:
+            _ensure_pt_patches()
+        confirm_fn = _bridge_send_and_wait if bridge_ok and not dry_run else None
+        try:
+            result = configure_serial_uc(device, interface, encapsulation=encapsulation,
+                                         clock_rate=clock_rate, ip=ip, mask=mask,
+                                         ppp_auth=ppp_auth, username=username, password=password,
+                                         confirm_send=confirm_fn, dry_run=dry_run)
+        except (ValueError, KeyError, TypeError) as exc:
+            return json.dumps({"error": f"Invalid serial input: {exc}"}, indent=2, ensure_ascii=False)
+        return _feature_response("Serial/WAN", interface, device, result, dry_run, bridge_ok)
+
+    @mcp.tool()
+    def pt_apply_gre_tunnel(
+        device: str,
+        tunnel_number: int,
+        source: str,
+        destination: str,
+        ip: str,
+        mask: str,
+        description: str | None = None,
+        dry_run: bool = False,
+    ) -> str:
+        """
+        Create a GRE tunnel interface.
+
+        Parameters:
+        - device: router name in PT.
+        - tunnel_number: e.g. 0 -> interface Tunnel0.
+        - source: tunnel source (local interface name or IP).
+        - destination: tunnel destination (the remote router's public IP).
+        - ip + mask: the tunnel's overlay IP address.
+        - description: optional.
+        - dry_run: validate + return the CLI without sending.
+        """
+        bridge_ok = _ensure_bridge() and _bridge_pt_connected()
+        if bridge_ok:
+            _ensure_pt_patches()
+        confirm_fn = _bridge_send_and_wait if bridge_ok and not dry_run else None
+        try:
+            result = apply_gre_tunnel_uc(device, tunnel_number, source, destination, ip, mask,
+                                         description=description, confirm_send=confirm_fn, dry_run=dry_run)
+        except (ValueError, KeyError, TypeError) as exc:
+            return json.dumps({"error": f"Invalid GRE tunnel input: {exc}"}, indent=2, ensure_ascii=False)
+        return _feature_response("GRE tunnel", f"Tunnel{tunnel_number}", device, result, dry_run, bridge_ok)
