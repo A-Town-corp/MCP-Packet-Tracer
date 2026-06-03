@@ -5,6 +5,7 @@ Defines all the tools the LLM can invoke.
 """
 
 from __future__ import annotations
+import html
 import json
 import re
 import time
@@ -3018,8 +3019,57 @@ def register_tools(mcp: FastMCP) -> None:
             payload["note"] = ("Output was paged ('--More--') and PT idle-resets the console "
                                "between pages, so it may be incomplete. Prefer targeted commands "
                                "(e.g. 'show ip route', 'show ip ospf neighbor') over full "
-                               "'show running-config'.")
+                               "'show running-config' - or use pt_get_running_config.")
         return json.dumps(payload, indent=2, ensure_ascii=False)
+
+    @mcp.tool()
+    def pt_get_running_config(device: str) -> str:
+        """
+        Get the COMPLETE running-config of a router/switch as clean IOS text.
+
+        The reliable way to read a full config: instead of paging
+        'show running-config' through the console (which PT idle-resets on long
+        output), this reads the device's saved model (serializeToXml) and
+        extracts the embedded IOS configuration - always complete, never
+        truncated, no enable password needed.
+
+        Parameters:
+        - device: router/switch name in PT (use pt_query_topology).
+
+        Returns the running-config text (and its line count).
+        """
+        if not (_ensure_bridge() and _bridge_pt_connected()):
+            return json.dumps({"error": "Bridge/PT not connected."}, indent=2, ensure_ascii=False)
+        _ensure_pt_patches()
+        dev = json.dumps(device)
+        # Extract the <RUNNINGCONFIG> block and its <LINE> elements inside PT, so
+        # only the config text (not the whole 25KB device XML) crosses the bridge.
+        js = (
+            f'var d=ipc.network().getDevice({dev}); '
+            f'if(!d){{reportResult(JSON.stringify({{ok:false,error:"no device"}}));}} '
+            f'else if(typeof d.serializeToXml!=="function"){{reportResult(JSON.stringify({{ok:false,error:"no config model"}}));}} '
+            f'else{{var x=d.serializeToXml()||""; var s=x.indexOf("<RUNNINGCONFIG>"); var e=x.indexOf("</RUNNINGCONFIG>"); '
+            f'if(s<0||e<0){{reportResult(JSON.stringify({{ok:false,error:"no running-config in model"}}));}} '
+            f'else{{var block=x.substring(s+15,e); var parts=block.split("<LINE>"); var out=[]; '
+            f'for(var i=0;i<parts.length;i++){{var j=parts[i].indexOf("</LINE>"); if(j>=0){{out.push(parts[i].substring(0,j));}}}} '
+            f'reportResult(JSON.stringify({{ok:true, config: out.join("\\n")}}));}}}}')
+        res = _bridge_send_and_wait(js, timeout=12.0)
+        if res is None:
+            return json.dumps({"error": "PT did not respond (timeout)."}, indent=2, ensure_ascii=False)
+        try:
+            obj = json.loads(res)
+        except Exception:
+            return json.dumps({"error": "Could not parse PT response."}, indent=2, ensure_ascii=False)
+        if not obj.get("ok"):
+            return json.dumps({"error": obj.get("error", "could not read config"),
+                               "hint": "End devices (PC/server) have no IOS config; this is for routers/switches."},
+                              indent=2, ensure_ascii=False)
+        cfg = html.unescape(obj.get("config", "")).strip("\r\n")
+        return json.dumps({
+            "device": device,
+            "line_count": cfg.count("\n") + 1 if cfg else 0,
+            "running_config": cfg,
+        }, indent=2, ensure_ascii=False)
 
     @mcp.tool()
     def pt_ping(

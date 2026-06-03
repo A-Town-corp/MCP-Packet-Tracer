@@ -35,6 +35,7 @@ EXPECTED = {
     "pt_configure_serial", "pt_apply_gre_tunnel",
     # observability / object-model wave
     "pt_run_command", "pt_ping", "pt_save_project", "pt_configure_wireless",
+    "pt_get_running_config",
 }
 
 
@@ -52,4 +53,4 @@ def test_all_expected_tools_registered():
 
 def test_tool_count_at_least_expected():
     names = _registered_names()
-    assert len(names) >= len(EXPECTED) == 56
+    assert len(names) >= len(EXPECTED) == 57
