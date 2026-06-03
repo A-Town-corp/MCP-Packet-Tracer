@@ -155,8 +155,12 @@ def generate_management_cli(
 
     # SNMP community and optional location / contact
     if snmp is not None:
-        community = snmp["community"]
-        access = snmp.get("access", "ro").upper()
+        community = snmp.get("community")
+        if not community:
+            raise ValueError("snmp requires a non-empty 'community'")
+        access = str(snmp.get("access") or "ro").upper()
+        if access not in ("RO", "RW"):
+            raise ValueError(f"snmp 'access' must be 'ro' or 'rw', got {snmp.get('access')!r}")
         lines.append(f"snmp-server community {community} {access}")
         if snmp.get("location"):
             lines.append(f"snmp-server location {snmp['location']}")

@@ -31,7 +31,13 @@ def generate_acl_cli(plan: ACLPlan) -> list[str]:
         for entry in plan.entries:
             if entry.remark:
                 lines.append(f" remark {entry.remark}")
-            lines.append(" " + _render_entry(plan.name_or_number, plan.acl_type, entry, is_named=True))
+            rendered = _render_entry(plan.name_or_number, plan.acl_type, entry, is_named=True)
+            # A named-ACL entry may carry an explicit sequence number, which goes
+            # before the action ( "<seq> permit ..." ). Honor it instead of
+            # silently dropping the user's ordering.
+            if entry.sequence is not None:
+                rendered = f"{entry.sequence} {rendered}"
+            lines.append(" " + rendered)
         lines.append("exit")
     else:
         for entry in plan.entries:

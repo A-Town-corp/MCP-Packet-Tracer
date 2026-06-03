@@ -85,7 +85,17 @@ def _load_plan_or_error(plan_json: str) -> tuple[TopologyPlan | None, str | None
     instead of crashing the MCP layer with an uncaught ValidationError.
     """
     try:
-        return TopologyPlan.model_validate_json(plan_json), None
+        plan = TopologyPlan.model_validate_json(plan_json)
+        if not plan.devices:
+            # A structurally-valid but empty plan would silently no-op the whole
+            # deploy/generate path and report success; reject it explicitly.
+            return None, json.dumps({
+                "valid": False, "error_count": 1, "warning_count": 0,
+                "errors": [{"code": "EMPTY_PLAN", "message": "The plan has no devices."}],
+                "warnings": [],
+                "summary": "The plan is empty (no devices). Build one with pt_plan_topology first.",
+            }, indent=2, ensure_ascii=False)
+        return plan, None
     except ValidationError as exc:
         errs = []
         for e in exc.errors():
@@ -228,19 +238,23 @@ def register_tools(mcp: FastMCP) -> None:
         - floating_routes: backup static routes (AD=254) - must match
           pt_plan_topology so the estimate reflects the real build
         """
-        request = TopologyRequest(
-            routers=routers,
-            pcs_per_lan=pcs_per_lan,
-            laptops_per_lan=laptops_per_lan,
-            switches_per_router=switches_per_router,
-            servers=servers,
-            access_points=access_points,
-            has_wan=has_wan,
-            dhcp=dhcp,
-            routing=RoutingProtocol(routing),
-            floating_routes=floating_routes,
-        )
-        est = estimate_from_request(request)
+        try:
+            request = TopologyRequest(
+                routers=routers,
+                pcs_per_lan=pcs_per_lan,
+                laptops_per_lan=laptops_per_lan,
+                switches_per_router=switches_per_router,
+                servers=servers,
+                access_points=access_points,
+                has_wan=has_wan,
+                dhcp=dhcp,
+                routing=RoutingProtocol(routing),
+                floating_routes=floating_routes,
+            )
+            est = estimate_from_request(request)
+        except (ValueError, ValidationError, KeyError, TypeError) as exc:
+            return json.dumps(
+                {"error": f"Invalid estimate request: {exc}"}, indent=2, ensure_ascii=False)
         return json.dumps(est, indent=2, ensure_ascii=False)
 
     # ------------------------------------------------------------------
@@ -289,26 +303,32 @@ def register_tools(mcp: FastMCP) -> None:
 
         Returns the complete plan JSON.
         """
-        request = TopologyRequest(
-            template=TopologyTemplate(template),
-            routers=routers,
-            pcs_per_lan=pcs_per_lan,
-            laptops_per_lan=laptops_per_lan,
-            switches_per_router=switches_per_router,
-            servers=servers,
-            access_points=access_points,
-            has_wan=has_wan,
-            dhcp=dhcp,
-            routing=RoutingProtocol(routing),
-            router_model=router_model,
-            switch_model=switch_model,
-            floating_routes=floating_routes,
-            ospf_process_id=ospf_process_id,
-            eigrp_as=eigrp_as,
-            vlans=vlans,
-        )
-        plan, validation = plan_from_request(request)
-        return plan.model_dump_json(indent=2)
+        try:
+            request = TopologyRequest(
+                template=TopologyTemplate(template),
+                routers=routers,
+                pcs_per_lan=pcs_per_lan,
+                laptops_per_lan=laptops_per_lan,
+                switches_per_router=switches_per_router,
+                servers=servers,
+                access_points=access_points,
+                has_wan=has_wan,
+                dhcp=dhcp,
+                routing=RoutingProtocol(routing),
+                router_model=router_model,
+                switch_model=switch_model,
+                floating_routes=floating_routes,
+                ospf_process_id=ospf_process_id,
+                eigrp_as=eigrp_as,
+                vlans=vlans,
+            )
+            plan, validation = plan_from_request(request)
+            return plan.model_dump_json(indent=2)
+        except (ValueError, ValidationError, KeyError, TypeError) as exc:
+            return json.dumps(
+                {"error": f"Invalid topology request: {exc}",
+                 "hint": "Check template/routing values and numeric ranges."},
+                indent=2, ensure_ascii=False)
 
     # ------------------------------------------------------------------
     # VALIDATION
@@ -496,25 +516,31 @@ def register_tools(mcp: FastMCP) -> None:
         - ospf_process_id: OSPF process ID (1-65535, default 1)
         - eigrp_as: AS number for EIGRP (1-65535, default 100)
         """
-        request = TopologyRequest(
-            template=TopologyTemplate(template),
-            routers=routers,
-            pcs_per_lan=pcs_per_lan,
-            laptops_per_lan=laptops_per_lan,
-            switches_per_router=switches_per_router,
-            servers=servers,
-            access_points=access_points,
-            has_wan=has_wan,
-            dhcp=dhcp,
-            routing=RoutingProtocol(routing),
-            router_model=router_model,
-            switch_model=switch_model,
-            floating_routes=floating_routes,
-            ospf_process_id=ospf_process_id,
-            eigrp_as=eigrp_as,
-            vlans=vlans,
-        )
-        plan, validation = plan_from_request(request)
+        try:
+            request = TopologyRequest(
+                template=TopologyTemplate(template),
+                routers=routers,
+                pcs_per_lan=pcs_per_lan,
+                laptops_per_lan=laptops_per_lan,
+                switches_per_router=switches_per_router,
+                servers=servers,
+                access_points=access_points,
+                has_wan=has_wan,
+                dhcp=dhcp,
+                routing=RoutingProtocol(routing),
+                router_model=router_model,
+                switch_model=switch_model,
+                floating_routes=floating_routes,
+                ospf_process_id=ospf_process_id,
+                eigrp_as=eigrp_as,
+                vlans=vlans,
+            )
+            plan, validation = plan_from_request(request)
+        except (ValueError, ValidationError, KeyError, TypeError) as exc:
+            return json.dumps(
+                {"error": f"Invalid build request: {exc}",
+                 "hint": "Check template/routing values and numeric ranges."},
+                indent=2, ensure_ascii=False)
         explanation = explain_plan(plan)
         estimation = estimate_from_plan(plan)
 
@@ -827,6 +853,7 @@ def register_tools(mcp: FastMCP) -> None:
         'for (var i = 0; i < count; i++) { var d = net.getDeviceAt(i); '
         'var dev = { name: d.getName(), type: d.getType() }; '
         'try { if (typeof d.getModel === "function") dev.model = d.getModel(); } catch (e) {} '
+        'try { dev.x = Math.round(d.getXCoordinate()); dev.y = Math.round(d.getYCoordinate()); } catch (e) {} '
         'devices.push(dev); } '
         'reportResult(JSON.stringify({ count: count, devices: devices })); }; '
         'this.renameDevice = function(oldName, newName) { '
@@ -954,7 +981,10 @@ def register_tools(mcp: FastMCP) -> None:
             if status == 200:
                 sent += 1
             time.sleep(command_delay)
-        return {"deployed": True, "sent": sent, "total": len(commands)}
+        # Only claim a deploy if there was something to send AND every command was
+        # accepted; sent=0 (all POSTs failed) or a partial send is NOT success.
+        deployed = len(commands) > 0 and sent == len(commands)
+        return {"deployed": deployed, "sent": sent, "total": len(commands)}
 
     @mcp.tool()
     def pt_live_deploy(
@@ -1037,8 +1067,17 @@ def register_tools(mcp: FastMCP) -> None:
     # ------------------------------------------------------------------
 
     def _js_escape(s: str) -> str:
-        """Escape a string for safe insertion into JS string literals."""
-        return s.replace("\\", "\\\\").replace('"', '\\"').replace("'", "\\'")
+        """Escape a string for safe insertion into JS string literals.
+
+        Includes newline/CR so a value containing them can't break out of the
+        literal and corrupt the whole script (matches build_configure_js)."""
+        return (
+            s.replace("\\", "\\\\")
+            .replace('"', '\\"')
+            .replace("'", "\\'")
+            .replace("\n", "\\n")
+            .replace("\r", "\\r")
+        )
 
     def _bridge_send_and_wait(js_call: str, timeout: float = 10.0) -> str | None:
         """
@@ -2944,10 +2983,16 @@ def register_tools(mcp: FastMCP) -> None:
         _cl(f'cl.enterCommand({json.dumps(command)}); reportResult("");')
 
         # 4. Poll for output, paging through "--More--" (PT ignores
-        #    'terminal length 0'), stopping on the marker, stable output, or time.
-        #    Long paged output (e.g. full 'show running-config') is unreliable
-        #    because PT idle-resets the console between pages - we flag that.
+        #    'terminal length 0'). Long paged output (full 'show running-config')
+        #    is unreliable because PT idle-resets the console between pages - we
+        #    flag that. The command's real output often arrives a beat after the
+        #    echo, so we must NOT stop on the first quiet tick: stop only when the
+        #    exec prompt has returned (command finished), the `until` marker
+        #    appears, or the deadline elapses - never just because two reads
+        #    matched while the device was still working (which caused false ping
+        #    failures and empty 'show' output).
         deadline = time.time() + max_wait
+        start = time.time()
         out, prompt, last, paged = "", "", None, False
         while True:
             time.sleep(0.7)
@@ -2965,9 +3010,20 @@ def register_tools(mcp: FastMCP) -> None:
                 if time.time() >= deadline:
                     break
                 continue
-            if until and until in out:
+            if until:
+                # e.g. ping: keep polling until the marker appears or we time out;
+                # a quiet interval before the result is NOT a reason to give up.
+                if until in out or time.time() >= deadline:
+                    break
+                last = out
+                continue
+            if time.time() >= deadline:
                 break
-            if out == last or time.time() >= deadline:
+            # Non-until command: done when output stopped growing AND the device
+            # returned to an exec prompt, after at least `settle` seconds (so
+            # wait_seconds actually has an effect).
+            prompt_back = prompt.strip().endswith((">", "#"))
+            if out and out == last and prompt_back and (time.time() - start) >= settle:
                 break
             last = out
 
@@ -3202,17 +3258,23 @@ def register_tools(mcp: FastMCP) -> None:
 
         Returns what was applied and confirms via readback.
         """
-        if channel is None and bandwidth is None and not ssid:
-            return json.dumps({"error": "Provide at least channel or bandwidth."}, indent=2, ensure_ascii=False)
+        # ssid is not settable via the PT scripting API, so it can't satisfy the
+        # "something actionable" requirement - require channel or bandwidth.
+        if channel is None and bandwidth is None:
+            return json.dumps(
+                {"error": "Provide at least channel or bandwidth (ssid is not settable via the PT scripting API)."},
+                indent=2, ensure_ascii=False)
         if not (_ensure_bridge() and _bridge_pt_connected()):
             return json.dumps({"error": "Bridge/PT not connected."}, indent=2, ensure_ascii=False)
         _ensure_pt_patches()
         dev = json.dumps(device)
+        # Each setter flips `changed` only if it actually exists on the port, so
+        # ok reflects a REAL mutation instead of being hard-coded true.
         sets = []
         if channel is not None:
-            sets.append(f'if(typeof p.setChannel==="function"){{p.setChannel({int(channel)});}}')
+            sets.append(f'if(typeof p.setChannel==="function"){{p.setChannel({int(channel)});changed=true;}}')
         if bandwidth is not None:
-            sets.append(f'if(typeof p.setBandwidth==="function"){{p.setBandwidth({float(bandwidth)});}}')
+            sets.append(f'if(typeof p.setBandwidth==="function"){{p.setBandwidth({float(bandwidth)});changed=true;}}')
         # Auto-locate the radio port (isWirelessPort), falling back to port_index.
         js = (f'var d=ipc.network().getDevice({dev}); '
               f'if(!d){{reportResult(JSON.stringify({{ok:false,error:"no device"}}));}} '
@@ -3221,8 +3283,8 @@ def register_tools(mcp: FastMCP) -> None:
               f'if(pp&&typeof pp.isWirelessPort==="function"&&pp.isWirelessPort()===true){{idx=i;break;}}}} '
               f'var p=d.getPortAt(idx); '
               f'if(!p){{reportResult(JSON.stringify({{ok:false,error:"no port"}}));}} '
-              f'else{{{"".join(sets)} '
-              f'reportResult(JSON.stringify({{ok:true,port_index:idx,'
+              f'else{{var changed=false; {"".join(sets)} '
+              f'reportResult(JSON.stringify({{ok:changed,port_index:idx,'
               f'wireless:(typeof p.isWirelessPort==="function")?p.isWirelessPort():null,'
               f'channel:(typeof p.getChannel==="function")?p.getChannel():null}}));}}}}')
         res = _bridge_send_and_wait(js, timeout=10.0)
@@ -3233,7 +3295,10 @@ def register_tools(mcp: FastMCP) -> None:
         except Exception:
             pass
         note = None
-        if ssid:
+        if applied is False:
+            note = ("The located port exposed no setChannel/setBandwidth setter, so nothing "
+                    "was applied (this device/port may not be a configurable radio).")
+        elif ssid:
             note = "ssid ignored: PT scripting API does not expose SSID/auth on wireless ports (set it in the GUI)."
         out = {"device": device, "port_index": chosen, "applied": applied,
                "readback": res, "note": note}

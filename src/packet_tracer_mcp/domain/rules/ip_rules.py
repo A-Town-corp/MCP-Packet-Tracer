@@ -111,6 +111,14 @@ def validate_dhcp(plan: TopologyPlan) -> list[PlanError]:
             for ip in router.interfaces.values()
             if _is_valid_ip(ip)
         )
+        # Router-on-a-stick: the per-VLAN gateway lives on a dot1Q SUBinterface,
+        # not in router.interfaces, so also accept a matching subinterface IP.
+        if not gw_found:
+            gw_found = any(
+                _is_valid_ip(s.ip) and str(ipaddress.IPv4Interface(s.ip).ip) == pool.gateway
+                for s in plan.subinterfaces
+                if s.router == pool.router
+            )
         if not gw_found:
             errors.append(PlanError(
                 code=ErrorCode.DHCP_GATEWAY_MISMATCH,

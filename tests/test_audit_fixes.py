@@ -118,3 +118,99 @@ class TestSerialValidation:
 
     def test_ppp_auth_with_ppp_ok(self):
         assert " ppp authentication chap" in generate_serial_cli("Serial0/0/0", encapsulation="ppp", ppp_auth="chap")
+
+
+class TestAutoFixerCapacity:
+    def test_fastethernet_router_not_upgraded(self):
+        # #5: a 1841 (2 FastEthernet, 0 GigE) using both ports is valid and must
+        # NOT be upgraded to 2911 (capacity must compare TOTAL ports, not GigE).
+        from packet_tracer_mcp.domain.models.plans import TopologyPlan, DevicePlan, LinkPlan
+        from packet_tracer_mcp.domain.services.auto_fixer import _fix_insufficient_ports
+        plan = TopologyPlan(name="t", devices=[
+            DevicePlan(name="R1", model="1841", category="router"),
+            DevicePlan(name="R2", model="1841", category="router"),
+            DevicePlan(name="SW1", model="2960", category="switch"),
+        ], links=[
+            LinkPlan(device_a="R1", port_a="FastEthernet0/0", device_b="R2", port_b="FastEthernet0/0", cable="cross"),
+            LinkPlan(device_a="R1", port_a="FastEthernet0/1", device_b="SW1", port_b="FastEthernet0/1", cable="straight"),
+        ])
+        fixes = _fix_insufficient_ports(plan)
+        assert fixes == []
+        assert plan.device_by_name("R1").model == "1841"
+
+
+class TestDhcpSubinterface:
+    def test_gateway_on_subinterface_ok(self):
+        # #16: router-on-a-stick gateway lives on a subinterface, not in
+        # router.interfaces, and must not raise a false DHCP_GATEWAY_MISMATCH.
+        from packet_tracer_mcp.domain.models.plans import TopologyPlan, DevicePlan, Subinterface, DHCPPool
+        from packet_tracer_mcp.domain.models.errors import ErrorCode
+        from packet_tracer_mcp.domain.rules.ip_rules import validate_dhcp
+        plan = TopologyPlan(name="t", devices=[
+            DevicePlan(name="R1", model="2911", category="router"),
+        ], subinterfaces=[
+            Subinterface(router="R1", parent_port="GigabitEthernet0/0", vlan_id=10,
+                         ip="192.168.10.1", mask="255.255.255.0"),
+        ], dhcp_pools=[
+            DHCPPool(router="R1", pool_name="VLAN10", network="192.168.10.0",
+                     mask="255.255.255.0", gateway="192.168.10.1"),
+        ])
+        errs = validate_dhcp(plan)
+        assert not any(e.code == ErrorCode.DHCP_GATEWAY_MISMATCH for e in errs)
+
+
+class TestEmptyPlanGuard:
+    def test_empty_plan_rejected(self):
+        # #18: a structurally-valid but device-less plan must error, not no-op.
+        from packet_tracer_mcp.adapters.mcp.tool_registry import _load_plan_or_error
+        plan, err = _load_plan_or_error('{"name":"empty","devices":[],"links":[]}')
+        assert plan is None
+        assert err is not None and "EMPTY_PLAN" in err
+
+
+class TestProjectListingResilience:
+    def test_corrupt_metadata_does_not_crash(self, tmp_path):
+        # #20: one corrupt metadata.json must not take down the whole listing.
+        from packet_tracer_mcp.infrastructure.persistence.project_repository import ProjectRepository
+        (tmp_path / "good").mkdir()
+        (tmp_path / "good" / "metadata.json").write_text('{"project_name":"good"}', encoding="utf-8")
+        (tmp_path / "bad").mkdir()
+        (tmp_path / "bad" / "metadata.json").write_text('{ this is not json', encoding="utf-8")
+        repo = ProjectRepository(base_dir=tmp_path)
+        names = {p.get("project_name") for p in repo.list_projects()}
+        assert "good" in names and "bad" in names
+
+
+class TestBridgeProtocol:
+    def test_drain_and_requested_timeout(self):
+        # #3/#4: /drain clears orphaned results; /result honors ?timeout.
+        import json as _json
+        import urllib.request
+        import urllib.error
+        from packet_tracer_mcp.infrastructure.execution.live_bridge import PTCommandBridge
+        b = PTCommandBridge(port=54387)
+        b.start()
+        U = "http://127.0.0.1:54387"
+
+        def get(path, t=6):
+            try:
+                with urllib.request.urlopen(U + path, timeout=t) as r:
+                    return r.status, r.read().decode()
+            except urllib.error.HTTPError as e:
+                return e.code, ""
+
+        def post(path, body):
+            req = urllib.request.Request(U + path, data=body.encode(), method="POST")
+            with urllib.request.urlopen(req, timeout=4) as r:
+                return r.status
+
+        try:
+            assert _json.loads(get("/drain")[1])["drained"] == 0
+            post("/result", "HELLO")
+            assert get("/result?timeout=5") == (200, "HELLO")
+            assert get("/result?timeout=1", t=4)[0] == 204     # empty -> 204
+            post("/result", "A")
+            post("/result", "B")
+            assert _json.loads(get("/drain")[1])["drained"] == 2
+        finally:
+            b.stop()

@@ -63,7 +63,12 @@ class ProjectRepository:
             if d.is_dir():
                 meta_path = d / "metadata.json"
                 if meta_path.exists():
-                    meta = json.loads(meta_path.read_text(encoding="utf-8"))
+                    # One corrupt/unreadable metadata.json must not take down the
+                    # whole listing - fall back to the directory name.
+                    try:
+                        meta = json.loads(meta_path.read_text(encoding="utf-8"))
+                    except (json.JSONDecodeError, OSError, ValueError):
+                        meta = {"project_name": d.name, "error": "corrupt metadata.json"}
                     projects.append(meta)
                 else:
                     projects.append({"project_name": d.name})

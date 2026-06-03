@@ -10,6 +10,7 @@ import sys
 from pathlib import Path
 
 from ...domain.models.plans import TopologyPlan
+from ...shared.utils import safe_name
 from ..generator.ptbuilder_generator import generate_ptbuilder_script, generate_full_script
 from ..generator.cli_config_generator import generate_all_configs
 from .executor_base import ExecutorBase
@@ -48,8 +49,9 @@ class DeployExecutor(ExecutorBase):
     def execute(self, plan: TopologyPlan, project_name: str | None = None) -> dict:
         """Deploy the plan: clipboard + files + instructions."""
         base_name = (project_name or plan.name or "topology").strip() or "topology"
-        safe_name = base_name.replace(" ", "_")
-        project_dir = self.output_dir / safe_name
+        # Use the SAME normalization as ProjectRepository so a name with '/' or
+        # other unsafe chars maps to the same single directory (not a nested path).
+        project_dir = self.output_dir / safe_name(base_name)
         project_dir.mkdir(parents=True, exist_ok=True)
 
         # Generate scripts

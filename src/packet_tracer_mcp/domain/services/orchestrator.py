@@ -313,6 +313,13 @@ def _create_links(plan: TopologyPlan, req: TopologyRequest, pcs_list: list[int],
                 device_b=r2.name, port_b=p2,
                 cable=infer_cable("router", "router"),
             ))
+        else:
+            # Don't silently drop the link - surface it so the user knows the
+            # topology is short a port (add a module or use a router with more).
+            plan.warnings.append(
+                f"Could not link {r1.name} <-> {r2.name}: no free GigabitEthernet "
+                f"port available."
+            )
 
     # Router <-> Switch
     spr = req.switches_per_router
@@ -325,6 +332,12 @@ def _create_links(plan: TopologyPlan, req: TopologyRequest, pcs_list: list[int],
                     device_b=sw.name, port_b=sp,
                     cable=infer_cable("router", "switch"),
                 ))
+            else:
+                plan.warnings.append(
+                    f"Could not link {router.name} <-> {sw.name}: no free "
+                    f"GigabitEthernet port; switch {sw.name} may be orphaned. "
+                    f"Add a module or use a router with more ports."
+                )
 
     # Switch <-> PCs
     pc_idx = 0

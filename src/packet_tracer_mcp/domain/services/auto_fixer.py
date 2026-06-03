@@ -10,7 +10,7 @@ Tries to correct common errors automatically:
 from __future__ import annotations
 from ..models.plans import TopologyPlan
 from .validator import validate_plan
-from ...infrastructure.catalog.devices import resolve_model, get_ports_by_speed
+from ...infrastructure.catalog.devices import resolve_model
 from ...infrastructure.catalog.cables import infer_cable
 from ...shared.enums import PortSpeed
 
@@ -70,10 +70,12 @@ def _fix_cables(plan: TopologyPlan) -> list[str]:
 
 
 def _fix_insufficient_ports(plan: TopologyPlan) -> list[str]:
-    """Upgrade a router to 2911 when it lacks enough GigE ports - but only
-    when the upgrade would actually satisfy the need. If even 2911 is not
-    enough, leave it so validation reports INSUFFICIENT_PORTS instead of
-    silently mis-"fixing" the model."""
+    """Upgrade a router to 2911 only when it genuinely lacks enough TOTAL ports
+    for its links AND the upgrade would satisfy the need. Comparing the link
+    demand against the total port count (not GigE-only) matches
+    validate_port_capacity, so this no longer rewrites perfectly valid
+    FastEthernet / mixed-speed routers. If even 2911 is not enough, leave it so
+    validation reports INSUFFICIENT_PORTS instead of mis-"fixing" the model."""
     fixes = []
     port_usage: dict[str, int] = {}
 
@@ -82,7 +84,7 @@ def _fix_insufficient_ports(plan: TopologyPlan) -> list[str]:
             port_usage[dev_name] = port_usage.get(dev_name, 0) + 1
 
     best = resolve_model(_ROUTER_UPGRADE)
-    best_gig = len(get_ports_by_speed(best, PortSpeed.GIGABIT_ETHERNET)) if best else 0
+    best_cap = len(best.ports) if best else 0
 
     for dev in plan.devices:
         if dev.category != "router":
@@ -90,15 +92,15 @@ def _fix_insufficient_ports(plan: TopologyPlan) -> list[str]:
         model = resolve_model(dev.model)
         if not model:
             continue
-        gig_count = len(get_ports_by_speed(model, PortSpeed.GIGABIT_ETHERNET))
+        cap = len(model.ports)
         needed = port_usage.get(dev.name, 0)
 
-        if needed > gig_count and dev.model != _ROUTER_UPGRADE and needed <= best_gig:
+        if needed > cap and dev.model != _ROUTER_UPGRADE and needed <= best_cap:
             old_model = dev.model
             dev.model = _ROUTER_UPGRADE
             fixes.append(
                 f"Router {dev.name} upgraded from {old_model} to {_ROUTER_UPGRADE} "
-                f"(needs {needed} GigE ports; {old_model} only has {gig_count})"
+                f"(needs {needed} ports; {old_model} only has {cap})"
             )
 
     return fixes
