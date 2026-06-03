@@ -2881,46 +2881,82 @@ def register_tools(mcp: FastMCP) -> None:
         if pj.get("err") == "no_cli":
             return {"ok": False, "error": f"device '{device}' has no IOS console (not a router/switch)"}
 
-        en = ""
-        if enable_password is not None:
-            en = f'cl.enterCommand("enable"); cl.enterCommand({json.dumps(enable_password)}); '
-        # Setup: exit initial dialog if present, enable, disable paging.
-        _bridge_send_and_wait(
-            f'var cl={clget}; var p=cl.getPrompt()||""; '
-            f'if(p.indexOf("initial configuration")>-1){{cl.enterCommand("no");}} '
-            f'{en}cl.enterCommand("terminal length 0"); reportResult("");', timeout=8.0)
-        time.sleep(0.6)
-        base_raw = _bridge_send_and_wait(
-            f'var cl={clget}; reportResult(JSON.stringify({{n:(cl.getOutput()||"").length}}));', timeout=8.0)
+        def _cl(body: str, timeout: float = 8.0):
+            return _bridge_send_and_wait(f'var cl={clget}; {body}', timeout=timeout)
+
+        def _prompt() -> str:
+            r = _cl('reportResult(JSON.stringify({p:cl.getPrompt()||""}));')
+            try:
+                return json.loads(r).get("p", "") if r else ""
+            except Exception:
+                return ""
+
+        # 1. Normalize the console: wake it and clear any modal state until we are
+        #    at a real exec prompt (ends with '>' or '#'). PT logs the console out
+        #    when idle ("Press RETURN to get started"), so a plain Enter recovers.
+        for _ in range(4):
+            p = _prompt().strip()
+            if p.endswith(">") or p.endswith("#"):
+                break
+            if "initial configuration" in p:
+                _cl('cl.enterCommand("no"); reportResult("");')
+            else:
+                _cl('cl.enterCommand(""); reportResult("");')
+            time.sleep(0.5)
+
+        # 2. Enter enable mode ONLY when a password was supplied and we are not
+        #    already privileged. Critically, feed the password only if PT actually
+        #    prompts "Password:" - otherwise the password is typed at the exec
+        #    prompt as a bogus command and hangs the console on a DNS lookup.
+        if enable_password is not None and not _prompt().strip().endswith("#"):
+            _cl('cl.enterCommand("enable"); reportResult("");')
+            time.sleep(0.6)
+            if "assword" in _prompt():
+                _cl(f'cl.enterCommand({json.dumps(enable_password)}); reportResult("");')
+                time.sleep(0.7)
+
+        # 3. Baseline output length, then run the command.
+        base_raw = _cl('reportResult(JSON.stringify({n:(cl.getOutput()||"").length}));')
         try:
             base = int(json.loads(base_raw)["n"])
         except Exception:
             base = 0
-        _bridge_send_and_wait(f'var cl={clget}; cl.enterCommand({json.dumps(command)}); reportResult("");', timeout=8.0)
+        _cl(f'cl.enterCommand({json.dumps(command)}); reportResult("");')
 
-        # Poll for new output until the marker appears or we run out of time.
+        # 4. Poll for output, paging through "--More--" (PT ignores
+        #    'terminal length 0'), stopping on the marker, stable output, or time.
+        #    Long paged output (e.g. full 'show running-config') is unreliable
+        #    because PT idle-resets the console between pages - we flag that.
         deadline = time.time() + max_wait
-        out, prompt = "", ""
-        first = True
+        out, prompt, last, paged = "", "", None, False
         while True:
-            time.sleep(1.0 if until else settle)
-            r = _bridge_send_and_wait(
-                f'var cl={clget}; reportResult(JSON.stringify({{o:cl.getOutput()||"", p:cl.getPrompt()}}));', timeout=10.0)
+            time.sleep(0.7)
+            r = _cl('reportResult(JSON.stringify({o:cl.getOutput()||"", p:cl.getPrompt()}));', timeout=10.0)
             try:
                 rj = json.loads(r)
-                out = rj.get("o", "")[base:]
+                full = rj.get("o", "")
+                out = full[base:] if len(full) >= base else full
                 prompt = rj.get("p", "")
             except Exception:
                 pass
-            if not until or (until in out) or time.time() >= deadline:
+            if out.rstrip().endswith("--More--"):
+                paged = True
+                _cl('cl.enterChar(" "); reportResult("");')   # advance one page
+                if time.time() >= deadline:
+                    break
+                continue
+            if until and until in out:
                 break
-            first = False
-        # Isolate the command's own output: trim to the last echo of the command
-        # so boot/backlog never leaks even if the baseline read was cold.
-        ci = out.rfind(command)
+            if out == last or time.time() >= deadline:
+                break
+            last = out
+
+        # 5. Strip --More-- / backspace artifacts and isolate the command's output.
+        cleaned = re.sub(r'[ \t\x08]*--More--[ \t\x08]*', '', out).replace('\x08', '')
+        ci = cleaned.rfind(command)
         if ci != -1:
-            out = out[ci:]
-        return {"ok": True, "output": out.strip("\r\n"), "prompt": prompt}
+            cleaned = cleaned[ci:]
+        return {"ok": True, "output": cleaned.strip("\r\n"), "prompt": prompt, "truncated": paged}
 
     @mcp.tool()
     def pt_run_command(
@@ -2936,19 +2972,23 @@ def register_tools(mcp: FastMCP) -> None:
         The universal observability tool: any show/ping/traceroute/debug command
         you would type at the device prompt, with the real text output returned.
         Pairs with pt_apply_ios (which configures) so the agent can both change
-        and VERIFY device state (e.g. 'show ip route', 'show ip ospf neighbor',
-        'show running-config', 'show vlan brief').
+        and VERIFY device state. Best with TARGETED commands ('show ip route',
+        'show ip ospf neighbor', 'show ip interface brief', 'show vlan brief') -
+        very long output (full 'show running-config') may be truncated because PT
+        idle-resets the console between '--More--' pages; that case sets
+        truncated=true in the response.
 
         Parameters:
         - device: router/switch name in PT (use pt_query_topology). End devices
           (PC/server) have no IOS console - use pt_configure_pc / pt_ping there.
         - command: a single exec command, e.g. "show ip interface brief".
         - enable_password: if the device has an 'enable secret', pass it so the
-          console can reach privileged mode (needed for 'show running-config').
-          Most show/ping work in user mode without it.
+          console can reach privileged mode. Most show/ping work in user mode
+          without it.
         - wait_seconds: how long to let the command produce output (default 2).
 
-        Returns the captured output plus the final prompt.
+        Returns the captured output plus the final prompt (and truncated=true if
+        the output was paged and may be incomplete).
         """
         if not command or not command.strip():
             return json.dumps({"error": "command is required"}, indent=2, ensure_ascii=False)
@@ -2960,10 +3000,17 @@ def register_tools(mcp: FastMCP) -> None:
                                settle=max(0.5, wait_seconds))
         if not res.get("ok"):
             return json.dumps({"error": res.get("error", "command failed")}, indent=2, ensure_ascii=False)
-        return json.dumps({
+        payload = {
             "device": device, "command": command, "prompt": res.get("prompt"),
             "output": res.get("output"),
-        }, indent=2, ensure_ascii=False)
+        }
+        if res.get("truncated"):
+            payload["truncated"] = True
+            payload["note"] = ("Output was paged ('--More--') and PT idle-resets the console "
+                               "between pages, so it may be incomplete. Prefer targeted commands "
+                               "(e.g. 'show ip route', 'show ip ospf neighbor') over full "
+                               "'show running-config'.")
+        return json.dumps(payload, indent=2, ensure_ascii=False)
 
     @mcp.tool()
     def pt_ping(
@@ -3088,18 +3135,28 @@ def register_tools(mcp: FastMCP) -> None:
             sets.append(f'if(typeof p.setChannel==="function"){{p.setChannel({int(channel)});}}')
         if bandwidth is not None:
             sets.append(f'if(typeof p.setBandwidth==="function"){{p.setBandwidth({float(bandwidth)});}}')
+        # Auto-locate the radio port (isWirelessPort), falling back to port_index.
         js = (f'var d=ipc.network().getDevice({dev}); '
               f'if(!d){{reportResult(JSON.stringify({{ok:false,error:"no device"}}));}} '
-              f'else{{var p=d.getPortAt({int(port_index)}); '
+              f'else{{var n=d.getPortCount(); var idx={int(port_index)}; '
+              f'for(var i=0;i<n;i++){{var pp=d.getPortAt(i); '
+              f'if(pp&&typeof pp.isWirelessPort==="function"&&pp.isWirelessPort()===true){{idx=i;break;}}}} '
+              f'var p=d.getPortAt(idx); '
               f'if(!p){{reportResult(JSON.stringify({{ok:false,error:"no port"}}));}} '
               f'else{{{"".join(sets)} '
-              f'reportResult(JSON.stringify({{ok:true,wireless:(typeof p.isWirelessPort==="function")?p.isWirelessPort():null,'
+              f'reportResult(JSON.stringify({{ok:true,port_index:idx,'
+              f'wireless:(typeof p.isWirelessPort==="function")?p.isWirelessPort():null,'
               f'channel:(typeof p.getChannel==="function")?p.getChannel():null}}));}}}}')
         res = _bridge_send_and_wait(js, timeout=10.0)
         applied = parse_ok(res)
+        chosen = port_index
+        try:
+            chosen = json.loads(res).get("port_index", port_index)
+        except Exception:
+            pass
         note = None
         if ssid:
             note = "ssid ignored: PT scripting API does not expose SSID/auth on wireless ports (set it in the GUI)."
-        out = {"device": device, "port_index": port_index, "applied": applied,
+        out = {"device": device, "port_index": chosen, "applied": applied,
                "readback": res, "note": note}
         return json.dumps(out, indent=2, ensure_ascii=False)
