@@ -2956,6 +2956,15 @@ def register_tools(mcp: FastMCP) -> None:
         ci = cleaned.rfind(command)
         if ci != -1:
             cleaned = cleaned[ci:]
+        # If PT idle-reset the console mid-capture, everything from the reset
+        # banner on is stale backlog (old commands' output) - cut it and flag
+        # the result as truncated so it is never mistaken for the full output.
+        for marker in ("con0 is now available", "Press RETURN to get started",
+                       "% User Access Verification"):
+            k = cleaned.find(marker)
+            if k != -1:
+                cleaned = cleaned[:k]
+                paged = True
         return {"ok": True, "output": cleaned.strip("\r\n"), "prompt": prompt, "truncated": paged}
 
     @mcp.tool()
