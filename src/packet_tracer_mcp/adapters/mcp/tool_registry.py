@@ -6,6 +6,7 @@ Defines all the tools the LLM can invoke.
 
 from __future__ import annotations
 import json
+import re
 import time
 import urllib.request
 from mcp.server.fastmcp import FastMCP
@@ -2232,7 +2233,7 @@ def register_tools(mcp: FastMCP) -> None:
         - interfaces: list of dicts, one per interface:
             {"interface": "GigabitEthernet0/0",
              "ipv6": "2001:db8:1::1/64",
-             "ospf_area": 0 (optional — only if you pass ospfv3)}
+             "ospf_area": 0 (optional - only if you pass ospfv3)}
         - enable_routing: emit 'ipv6 unicast-routing' (default True; needed on
           routers/L3 switches that route IPv6).
         - ospfv3: optional dict to enable OSPFv3:
@@ -2847,3 +2848,258 @@ def register_tools(mcp: FastMCP) -> None:
         except (ValueError, KeyError, TypeError) as exc:
             return json.dumps({"error": f"Invalid GRE tunnel input: {exc}"}, indent=2, ensure_ascii=False)
         return _feature_response("GRE tunnel", f"Tunnel{tunnel_number}", device, result, dry_run, bridge_ok)
+
+    # ------------------------------------------------------------------
+    # CONSOLE / OBSERVABILITY: run exec commands, ping, save, wireless
+    # ------------------------------------------------------------------
+    def _run_device_exec(device: str, command: str, enable_password: str | None = None,
+                         settle: float = 2.0, until: str | None = None,
+                         max_wait: float = 14.0) -> dict:
+        """Drive a device console via getCommandLine(): step past the initial
+        config dialog, optionally enter enable mode, disable paging, run
+        `command`, and return only the newly produced output.
+
+        Returns {ok, output, prompt, error}. `until` lets the poller stop early
+        once a marker (e.g. "Success rate") appears; otherwise it waits `settle`.
+        """
+        dev = json.dumps(device)
+        clget = f'ipc.network().getDevice({dev}).getCommandLine()'
+        # Guard: device exists and is CLI-capable (routers/switches; not PC/server).
+        probe = _bridge_send_and_wait(
+            f'var d=ipc.network().getDevice({dev}); '
+            f'if(!d){{reportResult(JSON.stringify({{err:"no_device"}}));}} '
+            f'else if(typeof d.getCommandLine!=="function"){{reportResult(JSON.stringify({{err:"no_cli"}}));}} '
+            f'else{{reportResult(JSON.stringify({{ok:true}}));}}', timeout=8.0)
+        if probe is None:
+            return {"ok": False, "error": "bridge timeout reaching the device console"}
+        try:
+            pj = json.loads(probe)
+        except Exception:
+            pj = {}
+        if pj.get("err") == "no_device":
+            return {"ok": False, "error": f"device '{device}' not found"}
+        if pj.get("err") == "no_cli":
+            return {"ok": False, "error": f"device '{device}' has no IOS console (not a router/switch)"}
+
+        en = ""
+        if enable_password is not None:
+            en = f'cl.enterCommand("enable"); cl.enterCommand({json.dumps(enable_password)}); '
+        # Setup: exit initial dialog if present, enable, disable paging.
+        _bridge_send_and_wait(
+            f'var cl={clget}; var p=cl.getPrompt()||""; '
+            f'if(p.indexOf("initial configuration")>-1){{cl.enterCommand("no");}} '
+            f'{en}cl.enterCommand("terminal length 0"); reportResult("");', timeout=8.0)
+        time.sleep(0.6)
+        base_raw = _bridge_send_and_wait(
+            f'var cl={clget}; reportResult(JSON.stringify({{n:(cl.getOutput()||"").length}}));', timeout=8.0)
+        try:
+            base = int(json.loads(base_raw)["n"])
+        except Exception:
+            base = 0
+        _bridge_send_and_wait(f'var cl={clget}; cl.enterCommand({json.dumps(command)}); reportResult("");', timeout=8.0)
+
+        # Poll for new output until the marker appears or we run out of time.
+        deadline = time.time() + max_wait
+        out, prompt = "", ""
+        first = True
+        while True:
+            time.sleep(1.0 if until else settle)
+            r = _bridge_send_and_wait(
+                f'var cl={clget}; reportResult(JSON.stringify({{o:cl.getOutput()||"", p:cl.getPrompt()}}));', timeout=10.0)
+            try:
+                rj = json.loads(r)
+                out = rj.get("o", "")[base:]
+                prompt = rj.get("p", "")
+            except Exception:
+                pass
+            if not until or (until in out) or time.time() >= deadline:
+                break
+            first = False
+        # Isolate the command's own output: trim to the last echo of the command
+        # so boot/backlog never leaks even if the baseline read was cold.
+        ci = out.rfind(command)
+        if ci != -1:
+            out = out[ci:]
+        return {"ok": True, "output": out.strip("\r\n"), "prompt": prompt}
+
+    @mcp.tool()
+    def pt_run_command(
+        device: str,
+        command: str,
+        enable_password: str | None = None,
+        wait_seconds: float = 2.0,
+    ) -> str:
+        """
+        Run an EXEC (non-config) IOS command on a router/switch and capture the
+        terminal output.
+
+        The universal observability tool: any show/ping/traceroute/debug command
+        you would type at the device prompt, with the real text output returned.
+        Pairs with pt_apply_ios (which configures) so the agent can both change
+        and VERIFY device state (e.g. 'show ip route', 'show ip ospf neighbor',
+        'show running-config', 'show vlan brief').
+
+        Parameters:
+        - device: router/switch name in PT (use pt_query_topology). End devices
+          (PC/server) have no IOS console - use pt_configure_pc / pt_ping there.
+        - command: a single exec command, e.g. "show ip interface brief".
+        - enable_password: if the device has an 'enable secret', pass it so the
+          console can reach privileged mode (needed for 'show running-config').
+          Most show/ping work in user mode without it.
+        - wait_seconds: how long to let the command produce output (default 2).
+
+        Returns the captured output plus the final prompt.
+        """
+        if not command or not command.strip():
+            return json.dumps({"error": "command is required"}, indent=2, ensure_ascii=False)
+        if not (_ensure_bridge() and _bridge_pt_connected()):
+            return json.dumps({"error": "Bridge/PT not connected - cannot reach the device console."},
+                              indent=2, ensure_ascii=False)
+        _ensure_pt_patches()
+        res = _run_device_exec(device, command.strip(), enable_password=enable_password,
+                               settle=max(0.5, wait_seconds))
+        if not res.get("ok"):
+            return json.dumps({"error": res.get("error", "command failed")}, indent=2, ensure_ascii=False)
+        return json.dumps({
+            "device": device, "command": command, "prompt": res.get("prompt"),
+            "output": res.get("output"),
+        }, indent=2, ensure_ascii=False)
+
+    @mcp.tool()
+    def pt_ping(
+        device: str,
+        target: str,
+        count: int = 5,
+        enable_password: str | None = None,
+    ) -> str:
+        """
+        Ping from a router/switch and report reachability (success rate + RTT).
+
+        Runs 'ping <target>' on the device console and parses the result, so you
+        can verify end-to-end connectivity right after building/configuring.
+
+        Parameters:
+        - device: source router/switch name in PT.
+        - target: destination IP (e.g. "1.1.1.1").
+        - count: informational (PT sends 5 ICMP echoes by default).
+        - enable_password: only if needed to reach the console (usually not).
+
+        Returns success_rate (0-100), reachable (bool) and the raw ping output.
+        For pings FROM a PC/server use the device's Desktop in PT; this tool
+        targets IOS devices.
+        """
+        if not (_ensure_bridge() and _bridge_pt_connected()):
+            return json.dumps({"error": "Bridge/PT not connected."}, indent=2, ensure_ascii=False)
+        _ensure_pt_patches()
+        res = _run_device_exec(device, f"ping {target}", enable_password=enable_password,
+                               until="Success rate", max_wait=16.0)
+        if not res.get("ok"):
+            return json.dumps({"error": res.get("error", "ping failed")}, indent=2, ensure_ascii=False)
+        out = res.get("output", "")
+        rate = None
+        rates = re.findall(r"Success rate is (\d+) percent", out)
+        if rates:
+            rate = int(rates[-1])
+        return json.dumps({
+            "device": device, "target": target,
+            "success_rate": rate,
+            "reachable": (rate is not None and rate > 0),
+            "output": out,
+        }, indent=2, ensure_ascii=False)
+
+    @mcp.tool()
+    def pt_save_project(path: str | None = None) -> str:
+        """
+        Save the current Packet Tracer project (.pkt).
+
+        Parameters:
+        - path: absolute path to save a copy (fileSaveAsNoPrompt). If omitted,
+          saves the currently-open file in place (fileSave). A never-saved file
+          REQUIRES a path (otherwise PT would pop a blocking Save-As dialog).
+
+        Returns the saved filename reported by PT.
+        """
+        if not (_ensure_bridge() and _bridge_pt_connected()):
+            return json.dumps({"error": "Bridge/PT not connected."}, indent=2, ensure_ascii=False)
+        pre = _bridge_send_and_wait(
+            'var f=ipc.appWindow().getActiveFile(); '
+            'reportResult(JSON.stringify({n:(f&&f.getSavedFilename)?f.getSavedFilename():""}));', timeout=8.0)
+        try:
+            saved_name = json.loads(pre).get("n", "") if pre else ""
+        except Exception:
+            saved_name = ""
+        if not path and not saved_name:
+            return json.dumps(
+                {"error": "This project was never saved; provide an absolute 'path' to save it."},
+                indent=2, ensure_ascii=False)
+        if path:
+            # fileSaveAsNoPrompt(fileName, bAddToRecent) - the 2nd bool arg is
+            # mandatory; a single-arg call throws "Invalid arguments". It writes
+            # a copy to `path` without necessarily renaming the active file, so
+            # report the requested path.
+            js = (f'ipc.appWindow().fileSaveAsNoPrompt({json.dumps(path)}, true); '
+                  f'reportResult(JSON.stringify({{saved:{json.dumps(path)}}}));')
+        else:
+            js = ('ipc.appWindow().fileSave(); var f=ipc.appWindow().getActiveFile(); '
+                  'reportResult(JSON.stringify({saved:(f&&f.getSavedFilename)?f.getSavedFilename():""}));')
+        res = _bridge_send_and_wait(js, timeout=20.0)
+        if res is None:
+            return json.dumps({"error": "Save sent but PT did not confirm (timeout)."}, indent=2, ensure_ascii=False)
+        try:
+            saved = json.loads(res).get("saved", "")
+        except Exception:
+            saved = ""
+        return json.dumps({"saved": saved, "summary": f"Project saved: {saved or '(in place)'}"},
+                          indent=2, ensure_ascii=False)
+
+    @mcp.tool()
+    def pt_configure_wireless(
+        device: str,
+        port_index: int = 0,
+        channel: int | None = None,
+        bandwidth: float | None = None,
+        ssid: str | None = None,
+    ) -> str:
+        """
+        Configure a wireless radio port on an Access Point / wireless device.
+
+        Sets the RF channel and/or data-rate (bandwidth) on the radio port via
+        the PT object model.
+
+        Parameters:
+        - device: AP / wireless device name in PT.
+        - port_index: radio port index (default 0).
+        - channel: RF channel number.
+        - bandwidth: radio data rate (Mbps).
+        - ssid: NOTE - PT does NOT expose SSID/authentication on the scripting
+          API (no port setter exists), so an ssid value is reported as
+          unsupported. Set SSID/security in the PT GUI (AP Config > Port).
+
+        Returns what was applied and confirms via readback.
+        """
+        if channel is None and bandwidth is None and not ssid:
+            return json.dumps({"error": "Provide at least channel or bandwidth."}, indent=2, ensure_ascii=False)
+        if not (_ensure_bridge() and _bridge_pt_connected()):
+            return json.dumps({"error": "Bridge/PT not connected."}, indent=2, ensure_ascii=False)
+        _ensure_pt_patches()
+        dev = json.dumps(device)
+        sets = []
+        if channel is not None:
+            sets.append(f'if(typeof p.setChannel==="function"){{p.setChannel({int(channel)});}}')
+        if bandwidth is not None:
+            sets.append(f'if(typeof p.setBandwidth==="function"){{p.setBandwidth({float(bandwidth)});}}')
+        js = (f'var d=ipc.network().getDevice({dev}); '
+              f'if(!d){{reportResult(JSON.stringify({{ok:false,error:"no device"}}));}} '
+              f'else{{var p=d.getPortAt({int(port_index)}); '
+              f'if(!p){{reportResult(JSON.stringify({{ok:false,error:"no port"}}));}} '
+              f'else{{{"".join(sets)} '
+              f'reportResult(JSON.stringify({{ok:true,wireless:(typeof p.isWirelessPort==="function")?p.isWirelessPort():null,'
+              f'channel:(typeof p.getChannel==="function")?p.getChannel():null}}));}}}}')
+        res = _bridge_send_and_wait(js, timeout=10.0)
+        applied = parse_ok(res)
+        note = None
+        if ssid:
+            note = "ssid ignored: PT scripting API does not expose SSID/auth on wireless ports (set it in the GUI)."
+        out = {"device": device, "port_index": port_index, "applied": applied,
+               "readback": res, "note": note}
+        return json.dumps(out, indent=2, ensure_ascii=False)
