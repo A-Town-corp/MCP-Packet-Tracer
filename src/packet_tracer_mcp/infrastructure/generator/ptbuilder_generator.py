@@ -8,6 +8,12 @@ with the Packet Tracer PTBuilder extension.
 from __future__ import annotations
 import json
 from ...domain.models.plans import TopologyPlan
+from ...shared.constants import (
+    PT_DEVICE_TYPE,
+    PT_DEVICE_TYPE_DEFAULT,
+    PT_CONNECT_TYPE,
+    PT_CONNECT_TYPE_DEFAULT,
+)
 
 
 def generate_ptbuilder_script(plan: TopologyPlan) -> str:
@@ -15,15 +21,19 @@ def generate_ptbuilder_script(plan: TopologyPlan) -> str:
     lines: list[str] = []
 
     for dev in plan.devices:
-        lines.append(f'addDevice("{dev.name}", "{dev.model}", {dev.x}, {dev.y});')
+        device_type = PT_DEVICE_TYPE.get(dev.category, PT_DEVICE_TYPE_DEFAULT)
+        lines.append(
+            f'lwAddDevice("{dev.name}", {device_type}, "{dev.model}", {dev.x}, {dev.y});'
+        )
 
     for mod in plan.modules:
         lines.append(f'addModule("{mod.device}", "{mod.slot}", "{mod.module}");')
 
     for link in plan.links:
+        connect_type = PT_CONNECT_TYPE.get(link.cable, PT_CONNECT_TYPE_DEFAULT)
         lines.append(
-            f'addLink("{link.device_a}", "{link.port_a}", '
-            f'"{link.device_b}", "{link.port_b}", "{link.cable}");'
+            f'lwAddLink("{link.device_a}", "{link.port_a}", '
+            f'"{link.device_b}", "{link.port_b}", {connect_type});'
         )
 
     return "\n".join(lines)

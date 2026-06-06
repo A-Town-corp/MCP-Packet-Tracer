@@ -17,7 +17,7 @@
 
 <table>
 <tr>
-<td align="center"><strong>57 MCP Tools</strong></td>
+<td align="center"><strong>60 MCP Tools</strong></td>
 <td align="center"><strong>5 MCP Resources</strong></td>
 <td align="center"><strong>74 Device Models</strong></td>
 <td align="center"><strong>151 Modules</strong></td>
@@ -83,7 +83,7 @@
 - [Installation](#-installation)
 - [Quick Start](#-quick-start)
 - [How It Works](#-how-it-works)
-- [MCP Tools (57)](#-mcp-tools)
+- [MCP Tools (60)](#-mcp-tools)
 - [MCP Resources (5)](#-mcp-resources)
 - [Live Deploy Setup](#-live-deploy-setup)
 - [Supported Devices (74)](#-supported-devices)
@@ -100,7 +100,7 @@
 
 ## ◈ What It Does
 
-A **Model Context Protocol (MCP) server** that gives any LLM (GitHub Copilot, Claude, Codex, etc.) full programmatic control over Cisco Packet Tracer. 57 MCP tools and 5 MCP resources cover the complete workflow:
+A **Model Context Protocol (MCP) server** that gives any LLM (GitHub Copilot, Claude, Codex, etc.) full programmatic control over Cisco Packet Tracer. 60 MCP tools and 5 MCP resources cover the complete workflow:
 
 ```
 Natural language prompt
@@ -357,7 +357,7 @@ Port 39000 was chosen to avoid collisions with common ports (3000, 5000, 8000, 8
 
 ## ◈ MCP Tools
 
-57 tools across 19 groups. Groups 1-12 cover the **plan → deploy** pipeline; groups 13-19 **live-configure** any device already on the canvas (they talk to the HTTP bridge directly, so they work on a freshly built topology or one you opened by hand).
+60 tools across 19 groups. Groups 1-12 cover the **plan → deploy** pipeline; groups 13-19 **live-configure** any device already on the canvas (they talk to the HTTP bridge directly, so they work on a freshly built topology or one you opened by hand).
 
 ### Catalog
 
@@ -1013,7 +1013,7 @@ Templates are hints that guide the orchestrator's topology-building logic.
 src/packet_tracer_mcp/
 +-- adapters/
 |   +-- mcp/
-|       +-- tool_registry.py       # All 57 MCP tools (@mcp.tool decorators)
+|       +-- tool_registry.py       # All 60 MCP tools (@mcp.tool decorators)
 |       +-- resource_registry.py   # All 5 MCP resources (@mcp.resource decorators)
 |
 +-- application/

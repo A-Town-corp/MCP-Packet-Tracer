@@ -52,6 +52,8 @@ def validate_nat_against_topology(
     model = resolve_model(device.get("model", ""))
     if model is not None:
         valid_ports = {p.full_name for p in model.ports}
+        # Accept subinterfaces (e.g. "GigabitEthernet0/0/1.20") by validating that the
+        # base port exists - PT creates them dynamically when configuring dot1Q encapsulation.
         for iface_label, iface in [
             ("inside_interface", config.inside_interface),
             ("outside_interface", config.outside_interface),

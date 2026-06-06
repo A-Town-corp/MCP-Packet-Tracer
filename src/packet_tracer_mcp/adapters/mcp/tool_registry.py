@@ -831,14 +831,45 @@ def register_tools(mcp: FastMCP) -> None:
         'if (hasPower && powerState) { device.setPower(true); '
         'if (typeof device.skipBoot === "function") { device.skipBoot(); } } '
         'if (result != true) { return false; } return true; }; '
+        # lwAddDevice — crea device en Logical view (canvas item visible sin save+reload).
+        # The global addDevice only writes to the model + physical canvas; PT generates an auto-name
+        # (Router0, Switch1) which we rename to the requested one via device.setName().
+        'this.lwAddDevice = function(name, deviceType, model, x, y) { '
+        'var lw = ipc.appWindow().getActiveWorkspace().getLogicalWorkspace(); '
+        'var autoName = lw.addDevice(deviceType, model, x, y); '
+        'if (autoName && autoName !== name) { '
+        'var d = ipc.network().getDevice(autoName); '
+        'if (d && typeof d.setName === "function") { d.setName(name); } } '
+        'return name; }; '
+        # lwAddLink - creates the link in the Logical view. Accepts cable as a string or enum int.
+        'this.lwAddLink = function(d1, p1, d2, p2, cable) { '
+        'var CT = {straight:8100,cross:8101,crossover:8101,roll:8102,fiber:8103,'
+        'phone:8104,cable:8105,serial:8106,auto:8107,console:8108,wireless:8109,'
+        'coaxial:8110,octal:8111,cellular:8112,usb:8113,custom_io:8114}; '
+        'var t = (typeof cable === "number") ? cable : (CT[(cable || "auto").toLowerCase()] || 8107); '
+        'var lw = ipc.appWindow().getActiveWorkspace().getLogicalWorkspace(); '
+        'return lw.createLink(d1, p1, d2, p2, t); }; '
+        # configurePcIp — fix: ya no hardcodea FastEthernet0. Busca primer port ethernet
+        # del device iterando getPorts(). Funciona con PC-PT, Server-PT, Laptop-PT, etc.
         'this.configurePcIp = function(deviceName, dhcpEnabled, ipaddress, subnetMask, defaultGateway, dnsServer) { '
-        'var device = ipc.network().getDevice(deviceName); if (!device) { return; } '
-        'var port = device.getPort("FastEthernet0"); if (!port) { return; } '
+        'var device = ipc.network().getDevice(deviceName); if (!device) { return false; } '
+        'var port = null; '
+        'if (typeof device.getPorts === "function") { '
+        'var ports = device.getPorts(); '
+        'for (var i = 0; i < ports.length; i++) { '
+        'var pn = ports[i]; if (typeof pn !== "string") continue; '
+        'if (pn.indexOf("Ethernet") >= 0 || pn === "Wireless0") { '
+        'var p = device.getPort(pn); if (p) { port = p; break; } } } } '
+        'if (!port) { port = device.getPort("FastEthernet0"); } '
+        'if (!port) { return false; } '
         'if (dhcpEnabled === true || dhcpEnabled === false) { '
         'if (typeof device.setDhcpFlag === "function") { device.setDhcpFlag(dhcpEnabled); } } '
         'if (ipaddress && subnetMask) port.setIpSubnetMask(ipaddress, subnetMask); '
-        'if (defaultGateway) port.setDefaultGateway(defaultGateway); '
-        'if (dnsServer) port.setDnsServerIp(dnsServer); }; '
+        'if (defaultGateway) { '
+        'if (typeof device.setDefaultGateway === "function") { device.setDefaultGateway(defaultGateway); } '
+        'else if (typeof port.setDefaultGateway === "function") { port.setDefaultGateway(defaultGateway); } } '
+        'if (dnsServer && typeof port.setDnsServerIp === "function") { port.setDnsServerIp(dnsServer); } '
+        'return true; }; '
         'this.configureIosDevice = function(deviceName, commands) { '
         'var device = ipc.network().getDevice(deviceName); if (!device) { return false; } '
         'if (typeof device.skipBoot !== "function" || typeof device.enterCommand !== "function") { return false; } '
@@ -1284,6 +1315,107 @@ def register_tools(mcp: FastMCP) -> None:
                 return f"Error: {data.get('error', 'unknown')}\nNote: if the method does not exist in this version of PT, try pt_delete_device and recreate the links."
         except Exception:
             return f"Unexpected response: {result}"
+
+    @mcp.tool()
+    def pt_set_port(
+        device: str,
+        interface: str,
+        bandwidth: int = 0,
+        bandwidth_auto: int = -1,
+        full_duplex: int = -1,
+        duplex_auto: int = -1,
+        description: str = "",
+        mac_address: str = "",
+        power: int = -1,
+    ) -> str:
+        """
+        Configure low-level attributes of a port on a live device in PT.
+
+        Only applies the attributes passed explicitly (parameters with sentinel
+        defaults). Useful for tweaks the CLI does not expose easily or that you
+        want to apply without entering `configure terminal`.
+
+        Parameters:
+        - device: device name in PT (e.g. "R1")
+        - interface: interface name (e.g. "GigabitEthernet0/0")
+        - bandwidth: bandwidth in kbps (>0 to apply; 0 = no change)
+        - bandwidth_auto: 1 enables BW auto-negotiate, 0 disables it, -1 no change
+        - full_duplex: 1 full duplex, 0 half duplex, -1 no change
+        - duplex_auto: 1 enables duplex auto-negotiate, 0 disables, -1 no change
+        - description: descriptive text (empty = no change)
+        - mac_address: MAC in "AABB.CCDD.EEFF" format (empty = no change)
+        - power: 1 powers the port on, 0 powers it off, -1 no change
+
+        Returns which attributes were applied (those with an available method on
+        the port API). If a `setXxx` does not exist on the device model, it is
+        silently ignored and only what actually stuck is reported.
+        """
+        err = _check_bridge()
+        if err:
+            return err
+
+        parts = [
+            'var d=ipc.network().getDevice(' + json.dumps(device) + ');',
+            'if(!d){reportResult(JSON.stringify({success:false,error:"device not found: ' + _js_escape(device) + '"}));return;}',
+            'var p=d.getPort(' + json.dumps(interface) + ');',
+            'if(!p){reportResult(JSON.stringify({success:false,error:"port not found: ' + _js_escape(interface) + '"}));return;}',
+            'var applied=[];',
+        ]
+
+        if bandwidth and bandwidth > 0:
+            parts.append(
+                f'if(typeof p.setBandwidth==="function"){{p.setBandwidth({int(bandwidth)});applied.push("bandwidth={int(bandwidth)}");}}'
+            )
+        if bandwidth_auto in (0, 1):
+            v = "true" if bandwidth_auto == 1 else "false"
+            parts.append(
+                f'if(typeof p.setBandwidthAutoNegotiate==="function"){{p.setBandwidthAutoNegotiate({v});applied.push("bandwidth_auto={v}");}}'
+            )
+        if full_duplex in (0, 1):
+            v = "true" if full_duplex == 1 else "false"
+            parts.append(
+                f'if(typeof p.setFullDuplex==="function"){{p.setFullDuplex({v});applied.push("full_duplex={v}");}}'
+            )
+        if duplex_auto in (0, 1):
+            v = "true" if duplex_auto == 1 else "false"
+            parts.append(
+                f'if(typeof p.setDuplexAutoNegotiate==="function"){{p.setDuplexAutoNegotiate({v});applied.push("duplex_auto={v}");}}'
+            )
+        if description:
+            parts.append(
+                f'if(typeof p.setDescription==="function"){{p.setDescription({json.dumps(description)});applied.push("description");}}'
+            )
+        if mac_address:
+            parts.append(
+                f'if(typeof p.setMacAddress==="function"){{p.setMacAddress({json.dumps(mac_address)});applied.push("mac");}}'
+            )
+        if power in (0, 1):
+            v = "true" if power == 1 else "false"
+            parts.append(
+                f'if(typeof p.setPower==="function"){{p.setPower({v});applied.push("power={v}");}}'
+            )
+
+        parts.append('reportResult(JSON.stringify({success:true,applied:applied}));')
+
+        # IIFE para que los `return` tempranos funcionen en el Script Engine de PT.
+        js = '(function(){' + ''.join(parts) + '})()'
+
+        result = _bridge_send_and_wait(js, timeout=8.0)
+        if result is None:
+            return "Sin respuesta de PT."
+        try:
+            data = json.loads(result)
+            if data.get("success"):
+                applied = data.get("applied", [])
+                if not applied:
+                    return (
+                        f"Nothing applied on {device}/{interface}: "
+                        "no attributes were passed or no setXxx is available on this model."
+                    )
+                return f"Aplicado en {device}/{interface}: " + ", ".join(applied)
+            return f"Error: {data.get('error', 'desconocido')}"
+        except Exception:
+            return f"Respuesta inesperada: {result}"
 
     @mcp.tool()
     def pt_send_raw(js_code: str, wait_result: bool = False) -> str:
@@ -1779,6 +1911,250 @@ def register_tools(mcp: FastMCP) -> None:
             "applied": result.get("applied"),
             "dry_run": result["dry_run"],
         }, indent=2, ensure_ascii=False)
+
+    @mcp.tool()
+    def pt_apply_acl_object(
+        router: str,
+        name_or_number: str,
+        acl_type: str,
+        entries: list[dict],
+        binding_interface: str = "",
+        binding_direction: str = "in",
+        replace_existing: bool = True,
+        dry_run: bool = False,
+    ) -> str:
+        """
+        Apply an ACL using PT's object API (AclProcess.addAcl/addStatement)
+        instead of CLI via configureIosDevice.
+
+        Same input as pt_apply_acl. It is faster (no CLI parsing) and less
+        prone to triggering modal popups that break the bridge if a line goes wrong.
+
+        Limitation: the binding only works on physical catalog ports (e.g.
+        GigabitEthernet0/0). For subinterfaces (G0/0/1.20) use pt_apply_acl (CLI),
+        since port.setAclInID only applies to the base port and not the subinterface.
+
+        Pipeline: validar plan → generar statements (sin prefijo "access-list NAME ")
+        → ejecutar addAcl + addStatement uno por uno + binding opcional.
+        """
+        plan = build_acl_plan(router, name_or_number, acl_type, entries)
+        binding = None
+        if binding_interface:
+            binding = ACLBinding(
+                router=router,
+                interface=binding_interface,
+                acl_id=str(name_or_number),
+                direction=binding_direction,
+            )
+
+        bridge_ok = _ensure_bridge() and _bridge_pt_connected()
+        if bridge_ok:
+            _ensure_pt_patches()
+
+        # Static + topological validation
+        query_fn = _query_pt_devices if bridge_ok else None
+        result = apply_acl_uc(
+            plan=plan,
+            binding=binding,
+            query_pt_topology=query_fn,
+            bridge_send=None,        # no enviamos por CLI — armamos JS propio
+            dry_run=True,            # validar sin enviar
+        )
+
+        if not result["valid"]:
+            return json.dumps({
+                "summary": f"❌ ACL '{plan.name_or_number}' tiene {len(result['errors'])} error(es).",
+                "valid": False,
+                "errors": result["errors"],
+                "warnings": result["warnings"],
+                "sent": False,
+                "dry_run": dry_run,
+                "backend": "objects",
+            }, indent=2, ensure_ascii=False)
+
+        # Convert CLI lines to statements (without the "access-list NAME " prefix)
+        cli_lines = generate_acl_cli(plan)
+        prefix = f"access-list {plan.name_or_number} "
+        statements = [ln[len(prefix):] for ln in cli_lines if ln.startswith(prefix)]
+
+        # Construir JS para AclProcess.addAcl + addStatement
+        name_js = json.dumps(str(plan.name_or_number))
+        router_js = json.dumps(router)
+        stmts_js = "[" + ",".join(json.dumps(s) for s in statements) + "]"
+
+        js_lines = [
+            f"var d=ipc.network().getDevice({router_js});",
+            'if(!d){reportResult(JSON.stringify({success:false,error:"router not found"}));return;}',
+            'var ap=d.getProcess("AclProcess");',
+            'if(!ap){reportResult(JSON.stringify({success:false,error:"AclProcess not available"}));return;}',
+        ]
+        if replace_existing:
+            js_lines.append(f"try{{ap.removeAcl({name_js});}}catch(e){{}}")
+        js_lines.extend([
+            f"ap.addAcl({name_js});",
+            f"var acl=ap.getAcl({name_js});",
+            'if(!acl){reportResult(JSON.stringify({success:false,error:"addAcl failed"}));return;}',
+            f"var stmts={stmts_js};",
+            'var added=0;for(var i=0;i<stmts.length;i++){if(acl.addStatement(stmts[i]))added++;}',
+        ])
+
+        bound = "none"
+        if binding:
+            iface_js = json.dumps(binding.interface)
+            setter = "setAclInID" if binding.direction == "in" else "setAclOutID"
+            js_lines.extend([
+                f"var p=d.getPort({iface_js});",
+                f'if(p){{p.{setter}({name_js});}}',
+            ])
+            bound = f"{binding.interface} {binding.direction}"
+
+        js_lines.append(
+            'reportResult(JSON.stringify({success:true,added:added,cmdCount:acl.getCommandCount()}));'
+        )
+
+        js = "(function(){" + "".join(js_lines) + "})()"
+
+        payload = {
+            "summary": "",
+            "valid": True,
+            "errors": [],
+            "warnings": result["warnings"],
+            "cli_lines": cli_lines,
+            "statements": statements,
+            "js_payload": js,
+            "binding": bound,
+            "sent": False,
+            "dry_run": dry_run,
+            "backend": "objects",
+        }
+
+        if dry_run:
+            payload["summary"] = (
+                f"[dry_run] ACL '{plan.name_or_number}' lista: "
+                f"{len(statements)} statement(s) + binding={bound}. JS NO enviado."
+            )
+            return json.dumps(payload, indent=2, ensure_ascii=False)
+
+        if not bridge_ok:
+            payload["summary"] = "⚠ Bridge no conectado — payload generado pero NO enviado."
+            return json.dumps(payload, indent=2, ensure_ascii=False)
+
+        response = _bridge_send_and_wait(js, timeout=10.0)
+        if response is None:
+            payload["summary"] = "Sin respuesta de PT."
+            return json.dumps(payload, indent=2, ensure_ascii=False)
+
+        try:
+            r = json.loads(response)
+            if r.get("success"):
+                payload["sent"] = True
+                payload["added"] = r.get("added")
+                payload["cmd_count"] = r.get("cmdCount")
+                payload["summary"] = (
+                    f"📤 ACL '{plan.name_or_number}' applied on '{router}' via AclProcess "
+                    f"({r.get('added')}/{len(statements)} statements). Binding={bound}."
+                )
+            else:
+                payload["summary"] = f"Error PT: {r.get('error', 'desconocido')}"
+        except Exception:
+            payload["summary"] = f"Respuesta inesperada: {response}"
+
+        return json.dumps(payload, indent=2, ensure_ascii=False)
+
+    @mcp.tool()
+    def pt_remove_acl_object(
+        router: str,
+        name_or_number: str,
+        binding_interface: str = "",
+        binding_direction: str = "in",
+        dry_run: bool = False,
+    ) -> str:
+        """
+        Remove an ACL using the object API (AclProcess.removeAcl + Port.setAclInID="").
+
+        Alternative to pt_remove_acl (CLI). If binding_interface is specified,
+        it first clears the port's AclInID/AclOutID and then removes the ACL.
+
+        Parameters:
+        - router: device name in PT
+        - name_or_number: identifier of the ACL to remove
+        - binding_interface: optional, interface where the binding was
+        - binding_direction: "in" or "out" (only if binding_interface)
+        - dry_run: si True, devuelve payload sin enviarlo
+        """
+        bridge_ok = _ensure_bridge() and _bridge_pt_connected()
+        if bridge_ok:
+            _ensure_pt_patches()
+
+        name_js = json.dumps(str(name_or_number))
+        router_js = json.dumps(router)
+
+        js_lines = [
+            f"var d=ipc.network().getDevice({router_js});",
+            'if(!d){reportResult(JSON.stringify({success:false,error:"router not found"}));return;}',
+            'var ap=d.getProcess("AclProcess");',
+            'if(!ap){reportResult(JSON.stringify({success:false,error:"AclProcess not available"}));return;}',
+        ]
+
+        bound_label = "none"
+        if binding_interface:
+            iface_js = json.dumps(binding_interface)
+            setter = "setAclInID" if binding_direction == "in" else "setAclOutID"
+            js_lines.extend([
+                f"var p=d.getPort({iface_js});",
+                f'if(p){{p.{setter}("");}}',
+            ])
+            bound_label = f"{binding_interface} {binding_direction}"
+
+        js_lines.extend([
+            f"var removed=ap.removeAcl({name_js});",
+            'reportResult(JSON.stringify({success:true,removed:removed}));',
+        ])
+
+        js = "(function(){" + "".join(js_lines) + "})()"
+
+        payload = {
+            "summary": "",
+            "router": router,
+            "acl_id": str(name_or_number),
+            "binding": bound_label,
+            "js_payload": js,
+            "sent": False,
+            "dry_run": dry_run,
+            "backend": "objects",
+        }
+
+        if dry_run:
+            payload["summary"] = (
+                f"[dry_run] payload generado para remover ACL '{name_or_number}' "
+                f"en '{router}' (binding={bound_label}). NO enviado."
+            )
+            return json.dumps(payload, indent=2, ensure_ascii=False)
+
+        if not bridge_ok:
+            payload["summary"] = "⚠ Bridge no conectado — payload generado pero NO enviado."
+            return json.dumps(payload, indent=2, ensure_ascii=False)
+
+        response = _bridge_send_and_wait(js, timeout=10.0)
+        if response is None:
+            payload["summary"] = "Sin respuesta de PT."
+            return json.dumps(payload, indent=2, ensure_ascii=False)
+
+        try:
+            r = json.loads(response)
+            if r.get("success"):
+                payload["sent"] = True
+                payload["removed"] = r.get("removed")
+                payload["summary"] = (
+                    f"📤 ACL '{name_or_number}' removed on '{router}' via AclProcess "
+                    f"(removed={r.get('removed')}, binding={bound_label})."
+                )
+            else:
+                payload["summary"] = f"Error PT: {r.get('error', 'desconocido')}"
+        except Exception:
+            payload["summary"] = f"Respuesta inesperada: {response}"
+
+        return json.dumps(payload, indent=2, ensure_ascii=False)
 
     @mcp.tool()
     def pt_remove_acl(
