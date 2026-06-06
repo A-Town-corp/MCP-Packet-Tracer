@@ -4,13 +4,49 @@ build-backend = "hatchling.build"
 
 [project]
 name = "packet-tracer-mcp"
-version = "0.4.0"
-description = "MCP server for Cisco Packet Tracer - topology planning, validation, auto-fix, generation, and configuration"
+version = "0.5.0"
+description = "MCP server for Cisco Packet Tracer - plan, validate, generate, deploy and live-configure topologies from any LLM"
+readme = "README.md"
 requires-python = ">=3.11"
+license = { text = "MIT" }
+authors = [{ name = "Mateo" }]
+keywords = [
+    "mcp",
+    "model-context-protocol",
+    "packet-tracer",
+    "cisco",
+    "networking",
+    "ccna",
+    "network-automation",
+    "topology",
+    "ospf",
+    "llm",
+]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Intended Audience :: Education",
+    "Intended Audience :: Information Technology",
+    "License :: OSI Approved :: MIT License",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Topic :: System :: Networking",
+    "Topic :: Education",
+]
 dependencies = [
     "mcp[cli]>=1.0.0",
     "pydantic>=2.0.0",
 ]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=8.0.0",
+]
+
+[project.urls]
+Homepage = "https://github.com/Mats2208/MCP-Packet-Tracer"
+Repository = "https://github.com/Mats2208/MCP-Packet-Tracer"
+Issues = "https://github.com/Mats2208/MCP-Packet-Tracer/issues"
 
 [project.scripts]
 pt-mcp = "packet_tracer_mcp.server:main"

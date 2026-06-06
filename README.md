@@ -4,7 +4,7 @@
 
 **Tell your AI _"create a network with 3 routers, OSPF and DHCP"_ - it plans, validates, generates, and deploys the topology directly into Cisco Packet Tracer in real time.**
 
-[![Version](https://img.shields.io/badge/version-0.4.0-blue?style=flat-square)](https://github.com/Mats2208/MCP-Packet-Tracer/releases)
+[![Version](https://img.shields.io/badge/version-0.5.0-blue?style=flat-square)](https://github.com/Mats2208/MCP-Packet-Tracer/releases)
 [![Python](https://img.shields.io/badge/python-3.11+-3776AB?style=flat-square&logo=python&logoColor=white)](https://python.org)
 [![Pydantic v2](https://img.shields.io/badge/pydantic-v2-E92063?style=flat-square&logo=pydantic&logoColor=white)](https://docs.pydantic.dev)
 [![MCP](https://img.shields.io/badge/protocol-MCP-00B4D8?style=flat-square)](https://modelcontextprotocol.io)
@@ -17,7 +17,7 @@
 
 <table>
 <tr>
-<td align="center"><strong>30 MCP Tools</strong></td>
+<td align="center"><strong>57 MCP Tools</strong></td>
 <td align="center"><strong>5 MCP Resources</strong></td>
 <td align="center"><strong>74 Device Models</strong></td>
 <td align="center"><strong>151 Modules</strong></td>
@@ -83,7 +83,7 @@
 - [Installation](#-installation)
 - [Quick Start](#-quick-start)
 - [How It Works](#-how-it-works)
-- [MCP Tools (30)](#-mcp-tools)
+- [MCP Tools (57)](#-mcp-tools)
 - [MCP Resources (5)](#-mcp-resources)
 - [Live Deploy Setup](#-live-deploy-setup)
 - [Supported Devices (74)](#-supported-devices)
@@ -100,7 +100,7 @@
 
 ## ◈ What It Does
 
-A **Model Context Protocol (MCP) server** that gives any LLM (GitHub Copilot, Claude, Codex, etc.) full programmatic control over Cisco Packet Tracer. 30 MCP tools and 5 MCP resources cover the complete workflow:
+A **Model Context Protocol (MCP) server** that gives any LLM (GitHub Copilot, Claude, Codex, etc.) full programmatic control over Cisco Packet Tracer. 57 MCP tools and 5 MCP resources cover the complete workflow:
 
 ```
 Natural language prompt
@@ -357,7 +357,7 @@ Port 39000 was chosen to avoid collisions with common ports (3000, 5000, 8000, 8
 
 ## ◈ MCP Tools
 
-30 tools across 10 groups.
+57 tools across 19 groups. Groups 1-12 cover the **plan → deploy** pipeline; groups 13-19 **live-configure** any device already on the canvas (they talk to the HTTP bridge directly, so they work on a freshly built topology or one you opened by hand).
 
 ### Catalog
 
@@ -473,6 +473,72 @@ Configure address translation on live routers via the HTTP bridge. Three modes m
 > - `static` - one private IP always maps to the same public IP. Use for servers that must be reachable from the internet with a fixed address.
 > - `dynamic` - pool of public IPs assigned on demand. Use when you have more public IPs than PAT justifies but fewer than private hosts.
 > - `pat` - many private IPs share one public IP using port numbers. Use in virtually every home and enterprise network (`use_interface_overload=True` uses the WAN interface IP directly).
+
+### Live Routing
+
+Enable a routing protocol on a router that's already in the topology. Each tool confirms the config landed in PT (`configureIosDevice` returns OK) and returns the exact IOS lines it sent.
+
+| Tool | Description |
+|------|-------------|
+| `pt_apply_ospf` | Enable OSPF on an existing router (single or multi-area) |
+| `pt_apply_rip` | Enable RIP (defaults to RIPv2, `no auto-summary`) |
+| `pt_apply_eigrp` | Enable EIGRP for a given AS |
+| `pt_apply_bgp` | Enable BGP - neighbors, router-id and advertised networks |
+
+### Live Switching & VLANs
+
+| Tool | Description |
+|------|-------------|
+| `pt_create_vlans` | Create VLANs in a switch's VLAN database (with optional names) |
+| `pt_apply_vtp` | Configure VTP mode and domain |
+| `pt_apply_stp` | Configure Spanning Tree (mode, root priority, PortFast, BPDU guard) |
+| `pt_configure_etherchannel` | Bundle parallel links between two switches into an EtherChannel (LACP/PAgP/on), both ends in one call |
+| `pt_apply_port_security` | Enable switchport port-security on an access port (max MACs, violation, sticky) |
+| `pt_apply_svi` | Configure inter-VLAN routing on a multilayer (L3) switch using SVIs |
+
+### Live L3 Services
+
+| Tool | Description |
+|------|-------------|
+| `pt_add_static_route` | Add a static route or a default route to a router |
+| `pt_apply_hsrp` | Configure HSRP first-hop redundancy on a router/L3 interface |
+| `pt_apply_dhcp_relay` | Configure DHCP relay (`ip helper-address`) on an interface |
+| `pt_apply_ipv6` | Apply IPv6 addressing (dual-stack) and optional OSPFv3 |
+
+### Live Interfaces & WAN
+
+| Tool | Description |
+|------|-------------|
+| `pt_configure_interface` | Configure a generic interface: IP, description, admin state, speed/duplex, `no switchport` |
+| `pt_apply_loopback` | Create a Loopback interface with an IP address |
+| `pt_configure_serial` | Configure a serial / WAN interface (HDLC, PPP/CHAP, clock rate) |
+| `pt_apply_gre_tunnel` | Create a GRE tunnel interface (source, destination, overlay IP) |
+
+### Live Security & Universal Config
+
+| Tool | Description |
+|------|-------------|
+| `pt_apply_device_security` | Harden a device: enable secret, line passwords, SSH, login banner |
+| `pt_apply_management` | Configure management services: NTP, SNMP, syslog, clock timezone |
+| `pt_apply_ios` | Apply **arbitrary** Cisco IOS configuration lines to any router or switch - the universal escape hatch when no dedicated tool exists |
+
+### End Devices
+
+| Tool | Description |
+|------|-------------|
+| `pt_configure_pc` | Configure a PC / Laptop / Server `FastEthernet0`: static IP+gateway+DNS, or DHCP |
+| `pt_configure_wireless` | Configure a wireless radio port on an Access Point (channel, bandwidth) |
+
+### Observe & Diagnostics
+
+Read live state back from devices - turns the topology into a closed feedback loop (build → configure → verify).
+
+| Tool | Description |
+|------|-------------|
+| `pt_run_command` | Run an EXEC (non-config) IOS command and capture the raw output (e.g. `show ip ospf neighbor`) |
+| `pt_get_running_config` | Get the complete running-config of a router/switch as clean IOS text |
+| `pt_ping` | Ping from a router/switch and report reachability (success rate + RTT) |
+| `pt_save_project` | Save the current Packet Tracer project to a `.pkt` file |
 
 ---
 
@@ -947,7 +1013,7 @@ Templates are hints that guide the orchestrator's topology-building logic.
 src/packet_tracer_mcp/
 +-- adapters/
 |   +-- mcp/
-|       +-- tool_registry.py       # All 30 MCP tools (@mcp.tool decorators)
+|       +-- tool_registry.py       # All 57 MCP tools (@mcp.tool decorators)
 |       +-- resource_registry.py   # All 5 MCP resources (@mcp.resource decorators)
 |
 +-- application/
@@ -1072,6 +1138,20 @@ Generated:  8x addDevice, 7x addLink, 2x configureIosDevice, 4x configurePcIp
 **`pt_live_deploy`** sends all 21 commands through the bridge and the topology appears in Packet Tracer fully configured.
 
 ---
+
+---
+
+## ◈ Offline Tools
+
+Beyond the live MCP server, [`offline-tools/`](offline-tools/) contains standalone
+utilities that read, write and author Packet Tracer's encrypted file formats
+**without** running PT - useful for batch edits, CI, or adding canvas annotations
+the live scripting API can't create:
+
+- **`.pts` extension modules** - decrypt / re-encrypt (CAST-256-EAX, bit-perfect) and author new ones from scratch (`pts_builder.py`).
+- **`.pkt` / `.pka` save files** - decrypt / re-encrypt (Twofish-EAX, bit-perfect) and inject canvas **notes** + colored **VLAN circles** offline (`pkt_inject_note.py`, needs `pip install twofish`).
+
+See [`offline-tools/README.md`](offline-tools/README.md) for details.
 
 ---
 
