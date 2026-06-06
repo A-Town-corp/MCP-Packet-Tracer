@@ -29,8 +29,13 @@ The `.pkt` crypto (`pkt_decrypt`/`pkt_encrypt`, and therefore `pkt_inject_note`)
 needs Twofish:
 
 ```bash
-pip install twofish
+pip install twofish          # or: pip install -e ".[offline]"
 ```
+
+> **Python 3.12+:** the stock `twofish` package imports the removed `imp`
+> module. `pkt_decrypt`/`pkt_encrypt` load a tiny shim (`_twofish_compat.py`)
+> first, so it works unchanged on modern Python and on Windows/macOS/Linux — no
+> manual patching needed.
 
 ## Usage
 

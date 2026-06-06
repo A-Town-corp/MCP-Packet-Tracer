@@ -14,6 +14,7 @@ is that a re-decrypt yields the identical XML (and a real Packet Tracer can open
 import os
 import sys, struct, zlib
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+import _twofish_compat  # noqa: F401  -- makes the stock `twofish` import on Python 3.12+
 import twofish
 from eax import eax_encrypt
 from pkt_decrypt import KEY, IV, stage1, stage3, decrypt_pkt
