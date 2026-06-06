@@ -571,6 +571,8 @@ The live deploy feature sends commands directly to a running Packet Tracer insta
 | **39000** | MCP server (streamable-http) | Receives tool calls from the LLM or editor |
 | **54321** | HTTP bridge | Queues JS commands for PTBuilder to execute in PT |
 
+> **PTBuilder extension:** this repo bundles **[`V3-MCP-BUILDER.pts`](V3-MCP-BUILDER.pts)** — the PTBuilder extension that provides the *Builder Code Editor* used below. If your Packet Tracer doesn't already expose **Extensions -> Builder Code Editor**, install this file as a PT extension first (copy it into Packet Tracer's `extensions/` folder, then restart PT).
+
 ### Setup (once per PT session)
 
 1. Open **Cisco Packet Tracer 8.2+**
