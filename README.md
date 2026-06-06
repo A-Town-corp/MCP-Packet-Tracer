@@ -4,14 +4,13 @@
 
 **Tell your AI _"create a network with 3 routers, OSPF and DHCP"_ - it plans, validates, generates, and deploys the topology directly into Cisco Packet Tracer in real time.**
 
-[![Version](https://img.shields.io/badge/version-0.5.0-blue?style=flat-square)](https://github.com/Mats2208/MCP-Packet-Tracer/releases)
+[![Version](https://img.shields.io/badge/version-0.5.0-blue?style=flat-square)](https://github.com/mex-i/MCP-Packet-Tracer/releases)
 [![Python](https://img.shields.io/badge/python-3.11+-3776AB?style=flat-square&logo=python&logoColor=white)](https://python.org)
 [![Pydantic v2](https://img.shields.io/badge/pydantic-v2-E92063?style=flat-square&logo=pydantic&logoColor=white)](https://docs.pydantic.dev)
 [![MCP](https://img.shields.io/badge/protocol-MCP-00B4D8?style=flat-square)](https://modelcontextprotocol.io)
 [![Transport](https://img.shields.io/badge/transport-Streamable%20HTTP-8B5CF6?style=flat-square)]()
-[![License](https://img.shields.io/github/license/Mats2208/MCP-Packet-Tracer?style=flat-square&color=green)](https://github.com/Mats2208/MCP-Packet-Tracer/blob/main/LICENSE)
+[![License](https://img.shields.io/github/license/mex-i/MCP-Packet-Tracer?style=flat-square&color=green)](https://github.com/mex-i/MCP-Packet-Tracer/blob/main/LICENSE)
 
-[![MCP Registry](https://lobehub.com/badge/mcp/mats2208-mcp-packet-tracer)](https://lobehub.com/mcp/mats2208-mcp-packet-tracer)
 
 <br/>
 
@@ -138,7 +137,7 @@ Natural language prompt
 ## ◈ Installation
 
 ```bash
-git clone https://github.com/Mats2208/MCP-Packet-Tracer
+git clone https://github.com/mex-i/MCP-Packet-Tracer
 cd MCP-Packet-Tracer
 pip install -e .
 ```

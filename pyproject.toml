@@ -44,9 +44,9 @@ dev = [
 ]
 
 [project.urls]
-Homepage = "https://github.com/Mats2208/MCP-Packet-Tracer"
-Repository = "https://github.com/Mats2208/MCP-Packet-Tracer"
-Issues = "https://github.com/Mats2208/MCP-Packet-Tracer/issues"
+Homepage = "https://github.com/mex-i/MCP-Packet-Tracer"
+Repository = "https://github.com/mex-i/MCP-Packet-Tracer"
+Issues = "https://github.com/mex-i/MCP-Packet-Tracer/issues"
 
 [project.scripts]
 pt-mcp = "packet_tracer_mcp.server:main"
