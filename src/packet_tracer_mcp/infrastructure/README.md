@@ -115,7 +115,7 @@ Generates files under `projects/{safe_name}/`:
 - `metadata.json` - Timestamps, counts, name
 
 ### `deploy_executor.py` - Deployment with clipboard
-Extends ManualExecutor + copies `topology.js` to the clipboard (Windows via `clip.exe`) + generates step-by-step instructions.
+Extends ManualExecutor + copies `topology.js` to the system clipboard (Windows `clip.exe`, macOS `pbcopy`, Linux `wl-copy`/`xclip`/`xsel`) + generates step-by-step instructions.
 
 ### `live_executor.py` - Real-time deployment
 Sends JS commands to the HTTP bridge one by one with delays.

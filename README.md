@@ -142,6 +142,13 @@ cd MCP-Packet-Tracer
 pip install -e .
 ```
 
+> **Cross-platform.** The server and tools run **identically on Windows, macOS and Linux** — same commands, same output. Clipboard deploy automatically uses the native tool per OS (`clip` on Windows, `pbcopy` on macOS, `wl-copy`/`xclip`/`xsel` on Linux) and falls back to file export when none is present; generated scripts/configs are written with normalized (LF) line endings everywhere.
+
+> **Optional — offline `.pkt` tools.** To also use the [Offline Tools](#-offline-tools) for `.pkt`/`.pka` files, install the extra (pulls in `twofish`):
+> ```bash
+> pip install -e ".[offline]"
+> ```
+
 ---
 
 ## ◈ Quick Start
@@ -575,9 +582,12 @@ The live deploy feature sends commands directly to a running Packet Tracer insta
 
 **Recommended — bundled auto-start extension.** This repo ships **[`V3-MCP-BUILDER.pts`](V3-MCP-BUILDER.pts)** (the *MCP-BUILDER* extension): a Packet Tracer extension that hosts the bridge and **starts polling `:54321` automatically** when PT loads it — no per-session snippet to paste.
 
-1. Copy `V3-MCP-BUILDER.pts` into Packet Tracer's `extensions/` folder (or load it via the **Extensions** menu), then restart Packet Tracer.
-2. Open the builder window once (**Extensions -> MCP-BUILDER**) and **leave it open** — QtWebEngine freezes a *hidden* webview's timers, so the window must stay visible (just park it in a corner) for the poll to keep running.
-3. Confirm with the `pt_bridge_status` tool — it should report the bridge is active and PTBuilder is polling.
+1. Copy `V3-MCP-BUILDER.pts` into Packet Tracer's **install-directory** `extensions/` folder, then restart Packet Tracer:
+   - **Windows:** `C:\Program Files\Cisco Packet Tracer <version>\extensions\`
+   - **macOS / Linux:** the `extensions/` folder inside your Packet Tracer install
+   > **Use the install directory, not the per-user one.** On **PT 9.0** the per-user extensions folder (under your home/profile, e.g. `…\Cisco Packet Tracer 9.0.0\extensions\`) is **not** scanned — the `.pts` must live in the install directory. On the first launch after copying it, PT shows a one-time **"load this extension?"** prompt → click **Yes**. (On Windows you may need to run Packet Tracer, or copy the file, as administrator to write into `Program Files`.)
+2. After it loads, the MCP-BUILDER window opens automatically (or open it via **Extensions -> MCP-BUILDER**). **Leave it visible** — QtWebEngine freezes a *hidden* webview's timers, so the window must stay open (just park it in a corner) for the poll to keep running.
+3. Confirm with the `pt_bridge_status` tool — it should report the bridge is active and PTBuilder is polling. Once connected, the live-deploy and live-config tools drive Packet Tracer directly.
 
 **Fallback — stock builder, once per session.** If you'd rather use Packet Tracer's built-in builder, go to **Extensions -> Builder Code Editor**, paste this snippet and click **Run**:
 
@@ -1108,11 +1118,13 @@ python -m pytest tests/test_full_build.py::TestFullBuild::test_basic_2_routers -
 
 | Requirement | Version | Notes |
 |-------------|---------|-------|
+| Operating system | Windows / macOS / Linux | Identical behavior on all three |
 | Python | 3.11+ | |
 | Pydantic | 2.0+ | |
 | FastMCP / mcp[cli] | 1.0+ | |
-| Cisco Packet Tracer | 8.2+ | For live deploy only |
+| Cisco Packet Tracer | 8.2+ | For live deploy only (tested on 8.2 and 9.0) |
 | PTBuilder extension | - | Built into PT 8.2+, required for live deploy |
+| `twofish` | - | Optional, only for the `.pkt`/`.pka` offline tools (`pip install -e ".[offline]"`) |
 
 ---
 
@@ -1152,7 +1164,7 @@ utilities that read, write and author Packet Tracer's encrypted file formats
 the live scripting API can't create:
 
 - **`.pts` extension modules** - decrypt / re-encrypt (CAST-256-EAX, bit-perfect) and author new ones from scratch (`pts_builder.py`).
-- **`.pkt` / `.pka` save files** - decrypt / re-encrypt (Twofish-EAX, bit-perfect) and inject canvas **notes** + colored **VLAN circles** offline (`pkt_inject_note.py`, needs `pip install twofish`).
+- **`.pkt` / `.pka` save files** - decrypt / re-encrypt (Twofish-EAX, bit-perfect) and inject canvas **notes** + colored **VLAN circles** offline (`pkt_inject_note.py`, needs Twofish: `pip install -e ".[offline]"` or `pip install twofish`).
 
 See [`offline-tools/README.md`](offline-tools/README.md) for details.
 

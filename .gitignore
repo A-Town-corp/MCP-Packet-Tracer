@@ -30,6 +30,8 @@ data/test_*
 tmp/
 
 CLAUDE.md
+# Private internal knowledge file (kept locally, not published)
+MEMORY.md
 # Project exports (runtime output, not source)
 projects/
 

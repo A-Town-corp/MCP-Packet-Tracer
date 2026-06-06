@@ -1,0 +1,49 @@
+# Cross-platform line-ending policy.
+#
+# Without this file, Git's per-machine core.autocrlf setting decides line
+# endings, so a Windows checkout and a macOS checkout produce different bytes
+# (and Git's text/binary heuristic could even rewrite the encrypted Packet
+# Tracer modules, breaking decryption). Pinning the rules here makes every
+# checkout byte-identical on macOS, Linux and Windows.
+
+# Default: let Git detect text, but always store/check out text with LF.
+* text=auto eol=lf
+
+# Explicit text formats -> LF on every OS.
+*.py    text eol=lf
+*.js    text eol=lf
+*.json  text eol=lf
+*.md    text eol=lf
+*.txt   text eol=lf
+*.toml  text eol=lf
+*.cfg   text eol=lf
+*.ini   text eol=lf
+*.html  text eol=lf
+*.css   text eol=lf
+*.xml   text eol=lf
+*.svg   text eol=lf
+*.yml   text eol=lf
+*.yaml  text eol=lf
+*.sh    text eol=lf
+
+# Windows-native scripts keep CRLF if any are ever added.
+*.bat   text eol=crlf
+*.ps1   text eol=crlf
+*.cmd   text eol=crlf
+
+# Binary / encrypted formats -> Git must NEVER touch these. CRLF or encoding
+# normalization would corrupt the CAST-256 (.pts) / Twofish (.pkt/.pka)
+# ciphertext and break decryption (EAX tag mismatch).
+*.pts   binary
+*.pkt   binary
+*.pka   binary
+*.png   binary
+*.gif   binary
+*.jpg   binary
+*.jpeg  binary
+*.ico   binary
+*.pdf   binary
+*.whl   binary
+*.zip   binary
+*.woff  binary
+*.woff2 binary

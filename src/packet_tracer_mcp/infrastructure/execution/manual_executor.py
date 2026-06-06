@@ -30,25 +30,25 @@ class ManualExecutor(ExecutorBase):
         # PTBuilder script
         script = generate_ptbuilder_script(plan)
         script_path = project_dir / "topology.js"
-        script_path.write_text(script, encoding="utf-8")
+        script_path.write_text(script, encoding="utf-8", newline="\n")
         files["topology_script"] = str(script_path)
 
         # Full script (topology + configs as comments)
         full = generate_full_script(plan)
         full_path = project_dir / "full_build.js"
-        full_path.write_text(full, encoding="utf-8")
+        full_path.write_text(full, encoding="utf-8", newline="\n")
         files["full_script"] = str(full_path)
 
         # Individual CLI configs
         configs = generate_all_configs(plan)
         for device_name, config_text in configs.items():
             cfg_path = project_dir / f"{safe_name(device_name, fallback=device_name or 'device')}_config.txt"
-            cfg_path.write_text(config_text, encoding="utf-8")
+            cfg_path.write_text(config_text, encoding="utf-8", newline="\n")
             files[f"config_{device_name}"] = str(cfg_path)
 
         # Plan JSON
         plan_path = project_dir / "plan.json"
-        plan_path.write_text(plan.model_dump_json(indent=2), encoding="utf-8")
+        plan_path.write_text(plan.model_dump_json(indent=2), encoding="utf-8", newline="\n")
         files["plan_json"] = str(plan_path)
 
         # Project metadata
@@ -60,7 +60,7 @@ class ManualExecutor(ExecutorBase):
             "links": len(plan.links),
             "is_valid": plan.is_valid,
         }
-        meta_path.write_text(json.dumps(metadata, indent=2), encoding="utf-8")
+        meta_path.write_text(json.dumps(metadata, indent=2), encoding="utf-8", newline="\n")
         files["metadata"] = str(meta_path)
 
         return {

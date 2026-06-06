@@ -494,7 +494,7 @@ def register_tools(mcp: FastMCP) -> None:
         """
         Full pipeline: plan, validate, generate, explain, estimate and deploy.
 
-        If deploy=True (default), copies the script to the Windows clipboard
+        If deploy=True (default), copies the script to the system clipboard
         and generates step-by-step instructions for Packet Tracer.
 
         Parameters:
@@ -645,7 +645,7 @@ def register_tools(mcp: FastMCP) -> None:
                 parts.append("PT is not connected to the bridge - exported files for manual load.")
                 parts.append(f"   Files in: {deploy_result['project_dir']}")
                 if deploy_result["clipboard"]:
-                    parts.append("   Script copied to the clipboard (Windows): paste it in PT > Extensions > Scripting.")
+                    parts.append("   Script copied to the clipboard: paste it in PT > Extensions > Scripting.")
                 else:
                     parts.append("   Open the Builder Code Editor in PT (auto-connects) and retry, or paste topology.js.")
                 parts.append("")
@@ -700,7 +700,7 @@ def register_tools(mcp: FastMCP) -> None:
         output_dir: str = "projects",
     ) -> str:
         """
-        Deploy a plan in Packet Tracer: copies the script to the Windows
+        Deploy a plan in Packet Tracer: copies the script to the system
         clipboard, exports the configuration files, and generates
         step-by-step instructions.
 
@@ -993,8 +993,9 @@ def register_tools(mcp: FastMCP) -> None:
 
         Returns {deployed, sent, total}. deployed=False if the bridge is down or
         PT is not connected - the caller must fall back to file export.
-        This is the path that DOES work on macOS (the DeployExecutor clipboard
-        only works on Windows).
+        This is the primary cross-platform deploy path (no copy/paste). The
+        DeployExecutor fallback copies to the system clipboard on every OS
+        (clip.exe / pbcopy / xclip / wl-copy) and always also exports files.
         """
         if command_delay < 1.0:
             command_delay = 1.0

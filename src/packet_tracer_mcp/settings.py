@@ -2,7 +2,7 @@
 Global server configuration.
 """
 
-VERSION = "0.4.0"
+from . import __version__ as VERSION  # single source of truth for the version
 
 SERVER_NAME = "Packet Tracer MCP"
 
@@ -96,7 +96,7 @@ Individual calls may time out the bridge bootstrap if the reboot exceeds 5s.
 
 ## Important
 - The PT script engine accepts: addDevice, addLink, addModule, configureIosDevice, configurePcIp.
-- The MCP has 30 tools. Use `pt_full_build` for the general case (new topology with configs).
+- The MCP exposes 60 tools across 19 groups. Use `pt_full_build` for the general case (new topology with configs).
 - To create ONLY the physical topology without configuring IPs/OSPF/DHCP, send `dhcp_pools=[]`,
   `static_routes=[]`, `ospf_configs=[]`, etc. and leave `interfaces={}` in each DevicePlan.
 - If the user asks for something not in the catalog, report it clearly instead of inventing.

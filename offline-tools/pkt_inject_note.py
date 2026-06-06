@@ -133,7 +133,7 @@ if __name__ == "__main__":
 
     notes = []
     if args.notes_json:
-        notes.extend(json.load(open(args.notes_json)))
+        notes.extend(json.load(open(args.notes_json, encoding="utf-8")))
     for spec in args.note:
         x, y, text = spec.split(",", 2)
         notes.append({"text": text, "x": int(x), "y": int(y)})

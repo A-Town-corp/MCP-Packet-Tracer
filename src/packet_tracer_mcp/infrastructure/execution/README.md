@@ -33,7 +33,7 @@ Exports all plan artifacts as files to the filesystem.
 ```python
 class ManualExecutor(ExecutorBase):
     def execute(plan, project_name) -> dict
-    def is_available() -> True  # Siempre disponible
+    def is_available() -> True  # Always available
 ```
 
 **Generated files:**
@@ -59,11 +59,11 @@ class DeployExecutor(ExecutorBase):
 
 **Flow:**
 1. Generates scripts and configs (same as ManualExecutor)
-2. Copies `topology.js` to the clipboard (Windows only, via `clip.exe`)
+2. Copies `topology.js` to the system clipboard (Windows `clip.exe`, macOS `pbcopy`, Linux `wl-copy`/`xclip`/`xsel`)
 3. Saves all files to disk
 4. Generates step-by-step instructions for the user
 
-**Note:** The clipboard function works on Windows only. On macOS/Linux, the files are exported but the clipboard step is skipped.
+**Note:** The clipboard step is cross-platform. If no clipboard tool is found, it degrades gracefully to file export (the files are always written either way).
 
 ---
 

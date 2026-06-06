@@ -34,7 +34,7 @@ class ProjectRepository:
         project_dir.mkdir(parents=True, exist_ok=True)
 
         plan_path = project_dir / "plan.json"
-        plan_path.write_text(plan.model_dump_json(indent=2), encoding="utf-8")
+        plan_path.write_text(plan.model_dump_json(indent=2), encoding="utf-8", newline="\n")
 
         # Metadata
         meta_path = project_dir / "metadata.json"
@@ -45,7 +45,7 @@ class ProjectRepository:
             "links": len(plan.links),
             "is_valid": plan.is_valid,
         }
-        meta_path.write_text(json.dumps(meta, indent=2), encoding="utf-8")
+        meta_path.write_text(json.dumps(meta, indent=2), encoding="utf-8", newline="\n")
 
         return plan_path
 

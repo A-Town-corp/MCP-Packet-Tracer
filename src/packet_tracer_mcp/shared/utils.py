@@ -2,18 +2,41 @@
 
 from __future__ import annotations
 import ipaddress
+import re
 from .constants import PREFIX_TO_MASK
+
+# Characters Windows forbids in a path component (< > : " / \ | ? *) plus the
+# ASCII control range. On macOS/Linux only "/" and NUL are illegal, so a name
+# accepted there can crash mkdir()/write_text() on Windows. Stripping the full
+# Windows set keeps save/export/deploy behaviour identical on every OS.
+_ILLEGAL_FS_CHARS = re.compile(r'[<>:"/\\|?*\x00-\x1f]')
+
+# Windows reserves these device names (case-insensitive, with or without an
+# extension); creating "CON", "NUL", "COM1"… raises on Windows but not macOS.
+_WINDOWS_RESERVED = {
+    "CON", "PRN", "AUX", "NUL",
+    *(f"COM{i}" for i in range(1, 10)),
+    *(f"LPT{i}" for i in range(1, 10)),
+}
 
 
 def safe_name(name: str, fallback: str = "topology") -> str:
     """Normalize a name into a filesystem-safe token.
 
-    Used for project and file names: spaces become "_" and path
-    separators are removed. Must be applied consistently across save/load/delete
-    so the project round-trip works.
+    Used for project and file names. Produces the SAME result on Windows and
+    macOS/Linux so a project saved on one OS round-trips on the other:
+      - spaces become "_"
+      - characters illegal on Windows (< > : " / \\ | ? * and control chars) -> "_"
+      - trailing dots/spaces are stripped (Windows silently drops them)
+      - Windows reserved device names (CON, NUL, COM1..LPT9) get a "_" prefix
+
+    Must be applied consistently across save/load/delete so the round-trip works.
     """
     base = (name or "").strip() or fallback
-    safe = base.replace(" ", "_").replace("/", "_").replace("\\", "_")
+    safe = _ILLEGAL_FS_CHARS.sub("_", base).replace(" ", "_")
+    safe = safe.rstrip(" .") or fallback
+    if safe.split(".", 1)[0].upper() in _WINDOWS_RESERVED:
+        safe = "_" + safe
     return safe or fallback
 
 

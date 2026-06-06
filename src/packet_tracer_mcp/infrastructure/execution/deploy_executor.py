@@ -1,10 +1,11 @@
 """
-Deploy executor: copies scripts to the Windows clipboard
+Deploy executor: copies scripts to the OS clipboard
 and generates step-by-step instructions for Packet Tracer.
 """
 
 from __future__ import annotations
 
+import shutil
 import subprocess
 import sys
 from pathlib import Path
@@ -16,14 +17,39 @@ from ..generator.cli_config_generator import generate_all_configs
 from .executor_base import ExecutorBase
 
 
+def _clipboard_command() -> tuple[list[str], str] | None:
+    """Return (argv, text-encoding) for the current OS's clipboard tool, or None.
+
+    Cross-platform so deploy behaves identically on Windows, macOS and Linux:
+      - Windows -> clip.exe        (expects UTF-16-LE)
+      - macOS   -> pbcopy          (UTF-8)
+      - Linux   -> wl-copy / xclip / xsel, whichever is installed (UTF-8)
+    """
+    if sys.platform == "win32":
+        return (["clip"], "utf-16-le")
+    if sys.platform == "darwin":
+        return (["pbcopy"], "utf-8")
+    # Linux / BSD: prefer Wayland, then X11 helpers; use the first available.
+    for argv in (["wl-copy"], ["xclip", "-selection", "clipboard"], ["xsel", "--clipboard", "--input"]):
+        if shutil.which(argv[0]):
+            return (argv, "utf-8")
+    return None
+
+
 def _copy_to_clipboard(text: str) -> bool:
-    """Copy text to the Windows clipboard using clip.exe."""
-    if sys.platform != "win32":
+    """Copy text to the OS clipboard. Best-effort and cross-platform.
+
+    Returns False (not an error) when no clipboard tool is available; callers
+    always also write the script to disk, so deploy still succeeds either way.
+    """
+    cmd = _clipboard_command()
+    if cmd is None:
         return False
+    argv, encoding = cmd
     try:
         subprocess.run(
-            "clip",
-            input=text.encode("utf-16-le"),
+            argv,
+            input=text.encode(encoding),
             check=True,
             timeout=5,
         )
@@ -66,20 +92,20 @@ class DeployExecutor(ExecutorBase):
         files: dict[str, str] = {}
 
         script_path = project_dir / "topology.js"
-        script_path.write_text(topology_script, encoding="utf-8")
+        script_path.write_text(topology_script, encoding="utf-8", newline="\n")
         files["topology_script"] = str(script_path)
 
         full_path = project_dir / "full_build.js"
-        full_path.write_text(full_script, encoding="utf-8")
+        full_path.write_text(full_script, encoding="utf-8", newline="\n")
         files["full_script"] = str(full_path)
 
         for device_name, config_text in configs.items():
             cfg_path = project_dir / f"{device_name}_config.txt"
-            cfg_path.write_text(config_text, encoding="utf-8")
+            cfg_path.write_text(config_text, encoding="utf-8", newline="\n")
             files[f"config_{device_name}"] = str(cfg_path)
 
         plan_path = project_dir / "plan.json"
-        plan_path.write_text(plan.model_dump_json(indent=2), encoding="utf-8")
+        plan_path.write_text(plan.model_dump_json(indent=2), encoding="utf-8", newline="\n")
         files["plan_json"] = str(plan_path)
 
         # Generate instructions
@@ -98,8 +124,10 @@ class DeployExecutor(ExecutorBase):
         }
 
     def is_available(self) -> bool:
-        """Available when running on Windows (for clipboard support)."""
-        return sys.platform == "win32"
+        """Always available. File export + instructions are platform-independent,
+        and the clipboard step (clip.exe / pbcopy / xclip / wl-copy) degrades
+        gracefully to file export when no clipboard tool is present."""
+        return True
 
     @staticmethod
     def _build_instructions(

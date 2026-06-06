@@ -42,6 +42,12 @@ dependencies = [
 dev = [
     "pytest>=8.0.0",
 ]
+# Offline .pkt/.pka file-format tools (offline-tools/) need Twofish, which
+# pycryptodome does not provide. Installs identically on macOS and Windows:
+#   pip install -e ".[offline]"
+offline = [
+    "twofish",
+]
 
 [project.urls]
 Homepage = "https://github.com/mex-i/MCP-Packet-Tracer"

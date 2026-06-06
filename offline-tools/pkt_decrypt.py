@@ -7,7 +7,7 @@ Pipeline (decrypt_pka in pka2xml):
   3. Stage-3 deobfuscation: out[i] = data[i] ^ ((len - i) & 0xFF)
   4. Qt qUncompress (4-byte BE size header + zlib stream)  -- exactly ONCE
 
-Requires the patched `twofish` package on sys.path (venv_tf).
+Requires the `twofish` package (`pip install twofish`, or `pip install -e ".[offline]"`).
 """
 import os
 import sys, struct, zlib

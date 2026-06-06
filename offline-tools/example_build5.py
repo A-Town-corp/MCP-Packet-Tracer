@@ -6,6 +6,8 @@ Unique /16 per network (10.i.0.0/16). Coordinates are laid out per-topology with
 generous margins so nothing hugs the canvas edge.
 """
 import json
+import os
+import tempfile
 
 # ---- topology specs: routers with RELATIVE positions, r-r links, LAN sizes ----
 # lan_pcs maps a router -> number of PCs on its LAN (0 = no LAN/switch on it)
@@ -75,8 +77,10 @@ for i,spec in NETS.items():
         ospf.append({"router":f"N{i}-{rn}","process_id":1,"router_id":f"{i}.{i}.{i}.{list(routers).index(rn)+1}",
                      "networks":[{"network":f"10.{i}.0.0","wildcard":"0.0.255.255","area":0}]})
     plan={"name":f"U{i}","devices":devices,"links":links,"dhcp_pools":dhcp,"ospf_configs":ospf}
-    json.dump(plan, open(f"/tmp/u{i}.json","w"), separators=(",",":"))
+    out = os.path.join(tempfile.gettempdir(), f"u{i}.json")  # portable temp dir (no hardcoded /tmp)
+    with open(out, "w", encoding="utf-8") as fh:
+        json.dump(plan, fh, separators=(",",":"))
     npc=sum(lan_pcs.values()); nsw=len([1 for v in lan_pcs.values() if v>0])
     summary.append((i,spec["label"],nsw,npc,len(links)))
-    print(f"N{i} {spec['label']}: routers=5 switches={nsw} pcs={npc} links={len(links)} -> /tmp/u{i}.json")
+    print(f"N{i} {spec['label']}: routers=5 switches={nsw} pcs={npc} links={len(links)} -> {out}")
 print("\nDONE")

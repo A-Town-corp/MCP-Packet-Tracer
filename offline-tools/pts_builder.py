@@ -141,7 +141,7 @@ def build_pts_from_dir(out_path: str, src_dir: str, **manifest) -> dict:
     src_dir = os.path.abspath(src_dir)
     mf_path = os.path.join(src_dir, "manifest.json")
     if os.path.isfile(mf_path):
-        with open(mf_path) as f:
+        with open(mf_path, encoding="utf-8") as f:
             mf = json.load(f)
         mf.update({k: v for k, v in manifest.items() if v is not None})
         manifest = mf
@@ -188,5 +188,5 @@ if __name__ == "__main__":
     if args.src_dir:
         res = build_pts_from_dir(args.out, args.src_dir, **meta)
     else:
-        res = build_pts(args.out, scripts={"main.js": open(args.main_js).read()}, **meta)
+        res = build_pts(args.out, scripts={"main.js": open(args.main_js, encoding="utf-8").read()}, **meta)
     print(json.dumps(res, indent=2))

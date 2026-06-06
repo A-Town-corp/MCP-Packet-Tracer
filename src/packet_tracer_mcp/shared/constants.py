@@ -1,5 +1,7 @@
 """System constants."""
 
+from .. import __version__
+
 # Default router/switch
 DEFAULT_ROUTER = "2911"
 DEFAULT_SWITCH = "2960-24TT"
@@ -22,7 +24,7 @@ DEFAULT_DNS = "8.8.8.8"
 
 # System capabilities (so the LLM knows what we support)
 CAPABILITIES = {
-    "version": "0.4.0",
+    "version": __version__,
     "routing": ["static", "static_floating", "ospf", "eigrp", "rip", "none"],
     "features": ["dhcp", "wan", "switching", "auto_fix", "explain", "dry_run",
                  "floating_routes", "ospf_multi_process", "eigrp_as_config",
