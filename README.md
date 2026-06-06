@@ -571,13 +571,15 @@ The live deploy feature sends commands directly to a running Packet Tracer insta
 | **39000** | MCP server (streamable-http) | Receives tool calls from the LLM or editor |
 | **54321** | HTTP bridge | Queues JS commands for PTBuilder to execute in PT |
 
-> **PTBuilder extension:** this repo bundles **[`V3-MCP-BUILDER.pts`](V3-MCP-BUILDER.pts)** — the PTBuilder extension that provides the *Builder Code Editor* used below. If your Packet Tracer doesn't already expose **Extensions -> Builder Code Editor**, install this file as a PT extension first (copy it into Packet Tracer's `extensions/` folder, then restart PT).
+### Setup
 
-### Setup (once per PT session)
+**Recommended — bundled auto-start extension.** This repo ships **[`V3-MCP-BUILDER.pts`](V3-MCP-BUILDER.pts)** (the *MCP-BUILDER* extension): a Packet Tracer extension that hosts the bridge and **starts polling `:54321` automatically** when PT loads it — no per-session snippet to paste.
 
-1. Open **Cisco Packet Tracer 8.2+**
-2. Go to **Extensions -> Builder Code Editor**
-3. Paste this bootstrap script and click **Run**:
+1. Copy `V3-MCP-BUILDER.pts` into Packet Tracer's `extensions/` folder (or load it via the **Extensions** menu), then restart Packet Tracer.
+2. Open the builder window once (**Extensions -> MCP-BUILDER**) and **leave it open** — QtWebEngine freezes a *hidden* webview's timers, so the window must stay visible (just park it in a corner) for the poll to keep running.
+3. Confirm with the `pt_bridge_status` tool — it should report the bridge is active and PTBuilder is polling.
+
+**Fallback — stock builder, once per session.** If you'd rather use Packet Tracer's built-in builder, go to **Extensions -> Builder Code Editor**, paste this snippet and click **Run**:
 
 ```javascript
 /* PT-MCP Bridge */ window.webview.evaluateJavaScriptAsync("setInterval(function(){var x=new XMLHttpRequest();x.open('GET','http://127.0.0.1:54321/next',true);x.onload=function(){if(x.status===200&&x.responseText){$se('runCode',x.responseText)}};x.onerror=function(){};x.send()},500)");
