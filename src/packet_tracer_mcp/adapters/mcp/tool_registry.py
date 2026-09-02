@@ -73,8 +73,97 @@ from ...infrastructure.catalog.aliases import MODEL_ALIASES
 from ...infrastructure.catalog.templates import list_templates
 from ...infrastructure.catalog.modules import ALL_MODULES, resolve_module
 from ...shared.enums import RoutingProtocol, TopologyTemplate
-from ...shared.constants import DEFAULT_LAN_BASE, DEFAULT_LINK_BASE, CAPABILITIES
+from ...shared.constants import (
+    CAPABILITIES,
+    DEFAULT_LAN_BASE,
+    DEFAULT_LINK_BASE,
+    PT_CONNECT_TYPE,
+    PT_DEVICE_TYPE,
+    PT_DEVICE_TYPE_DEFAULT,
+)
 from pydantic import ValidationError
+
+
+_SUPPORTED_PDU_TRAFFIC_TYPES = {
+    "ARP",
+    "BGP",
+    "CDP",
+    "CUSTOM",
+    "DHCP",
+    "DNS",
+    "DTP",
+    "HTTP",
+    "HTTPS",
+    "ICMP",
+    "OSPF",
+    "RIPV1",
+    "RIPV2",
+    "STP",
+    "TCP",
+    "UDP",
+}
+
+_SENSITIVE_COMMAND_PATTERNS = (
+    re.compile(r"^(\s*enable\s+(?:secret|password)(?:\s+\d+)?\s+).+$", re.IGNORECASE),
+    re.compile(r"^(\s*username\s+\S+\s+(?:secret|password)(?:\s+\d+)?\s+).+$", re.IGNORECASE),
+    re.compile(r"^(\s*password(?:\s+\d+)?\s+).+$", re.IGNORECASE),
+    re.compile(
+        r"^(\s*(?:snmp-server\s+community|tacacs-server\s+key|"
+        r"radius-server\s+key|key-string|crypto\s+isakmp\s+key)\s+).+$",
+        re.IGNORECASE,
+    ),
+)
+
+
+def _json_tool_error(message: str) -> str:
+    """Return the structured error shape used by the adopted live tools."""
+    return json.dumps({"success": False, "error": message}, indent=2, ensure_ascii=False)
+
+
+def _redact_command_value(value: object, prompt: str) -> object:
+    """Redact credentials from one Packet Tracer command-log value."""
+    if not isinstance(value, str):
+        return value
+    if re.search(r"password|passphrase|secret", prompt, re.IGNORECASE):
+        return "[REDACTED]"
+    for pattern in _SENSITIVE_COMMAND_PATTERNS:
+        match = pattern.match(value)
+        if match:
+            return f"{match.group(1)}[REDACTED]"
+    return value
+
+
+def _redact_command_log_payload(payload: dict) -> dict:
+    """Return a copy of a command-log response with credential values removed."""
+    result = payload.get("result")
+    if not isinstance(result, dict):
+        return payload
+    entries = result.get("entries")
+    if not isinstance(entries, list):
+        return payload
+
+    redacted_entries = []
+    for raw_entry in entries:
+        if not isinstance(raw_entry, dict):
+            redacted_entries.append(raw_entry)
+            continue
+        prompt = raw_entry.get("prompt")
+        prompt_text = prompt if isinstance(prompt, str) else ""
+        redacted_entries.append({
+            **raw_entry,
+            "command": _redact_command_value(raw_entry.get("command"), prompt_text),
+            "resolvedCommand": _redact_command_value(
+                raw_entry.get("resolvedCommand"), prompt_text
+            ),
+        })
+
+    return {
+        **payload,
+        "result": {
+            **result,
+            "entries": redacted_entries,
+        },
+    }
 
 
 def _load_plan_or_error(plan_json: str) -> tuple[TopologyPlan | None, str | None]:
@@ -908,7 +997,113 @@ def register_tools(mcp: FastMCP) -> None:
         'if (!p) { reportResult(JSON.stringify({ success: false, error: "port not found" })); return; } '
         'if (typeof p.getLink === "function" && !p.getLink()) { reportResult(JSON.stringify({ success: false, error: "no link on that port" })); return; } '
         'p.deleteLink(); '
-        'reportResult(JSON.stringify({ success: true })); };'
+        'reportResult(JSON.stringify({ success: true })); }; '
+        # Packet Tracer object-API mappings below are adapted from cisco-pt-mcp
+        # by Muhammad Balawal (MIT). See THIRD_PARTY_NOTICES.md.
+        'this.ptErrorText = function(error) { '
+        'return (error && (error.message || String(error))) || "unknown error"; }; '
+        'this.ptAddDevice = function(name, deviceType, model, x, y) { try { '
+        'if (ipc.network().getDevice(name)) { reportResult(JSON.stringify({success:false,error:"device already exists: " + name})); return; } '
+        'var lw = ipc.appWindow().getActiveWorkspace().getLogicalWorkspace(); '
+        'var createdName = lw.addDevice(deviceType, model, x, y); '
+        'if (!createdName) { reportResult(JSON.stringify({success:false,error:"Packet Tracer did not create the device"})); return; } '
+        'var device = ipc.network().getDevice(createdName); '
+        'if (!device) { reportResult(JSON.stringify({success:false,error:"created device was not found in the network model"})); return; } '
+        'if (createdName !== name) { device.setName(name); } '
+        'if ((deviceType <= 1 || deviceType === 16) && typeof device.skipBoot === "function") { device.skipBoot(); } '
+        'reportResult(JSON.stringify({success:true,name:name,model:model,x:x,y:y})); '
+        '} catch (error) { reportResult(JSON.stringify({success:false,error:"Error adding device: " + ptErrorText(error)})); } }; '
+        'this.ptAddLink = function(deviceA, portA, deviceB, portB, cableType) { try { '
+        'var first = ipc.network().getDevice(deviceA); var second = ipc.network().getDevice(deviceB); '
+        'if (!first) { reportResult(JSON.stringify({success:false,error:"device not found: " + deviceA})); return; } '
+        'if (!second) { reportResult(JSON.stringify({success:false,error:"device not found: " + deviceB})); return; } '
+        'var firstPort = first.getPort(portA); var secondPort = second.getPort(portB); '
+        'if (!firstPort) { reportResult(JSON.stringify({success:false,error:"port not found: " + deviceA + "/" + portA})); return; } '
+        'if (!secondPort) { reportResult(JSON.stringify({success:false,error:"port not found: " + deviceB + "/" + portB})); return; } '
+        'if (typeof firstPort.getLink === "function" && firstPort.getLink()) { reportResult(JSON.stringify({success:false,error:"port already in use: " + deviceA + "/" + portA})); return; } '
+        'if (typeof secondPort.getLink === "function" && secondPort.getLink()) { reportResult(JSON.stringify({success:false,error:"port already in use: " + deviceB + "/" + portB})); return; } '
+        'var lw = ipc.appWindow().getActiveWorkspace().getLogicalWorkspace(); '
+        'var linked = lw.createLink(deviceA, portA, deviceB, portB, cableType); '
+        'if (linked !== true) { reportResult(JSON.stringify({success:false,error:"Packet Tracer did not create the link"})); return; } '
+        'reportResult(JSON.stringify({success:true,deviceA:deviceA,portA:portA,deviceB:deviceB,portB:portB,cableType:cableType})); '
+        '} catch (error) { reportResult(JSON.stringify({success:false,error:"Error adding link: " + ptErrorText(error)})); } }; '
+        'this.ptPortNames = function(device) { '
+        'var names = []; if (typeof device.getPorts === "function") { '
+        'var rawNames = device.getPorts(); for (var i = 0; i < rawNames.length; i++) { if (typeof rawNames[i] === "string") names.push(rawNames[i]); } '
+        '} else if (typeof device.getPortCount === "function" && typeof device.getPortAt === "function") { '
+        'for (var j = 0; j < device.getPortCount(); j++) { var p = device.getPortAt(j); if (p && typeof p.getName === "function") names.push(p.getName()); } } '
+        'return names; }; '
+        'this.ptBuildNetworkSnapshot = function() { '
+        'var net = ipc.network(); var deviceCount = net.getDeviceCount(); var devices = []; var owners = []; '
+        'for (var i = 0; i < deviceCount; i++) { var device = net.getDeviceAt(i); var deviceName = device.getName(); '
+        'var item = {name:deviceName,type:device.getType(),interfaces:[]}; '
+        'if (typeof device.getModel === "function") item.model = device.getModel(); '
+        'if (typeof device.getXCoordinate === "function") item.x = Math.round(device.getXCoordinate()); '
+        'if (typeof device.getYCoordinate === "function") item.y = Math.round(device.getYCoordinate()); '
+        'var portNames = ptPortNames(device); for (var pi = 0; pi < portNames.length; pi++) { '
+        'var port = device.getPort(portNames[pi]); if (!port) continue; owners.push({port:port,device:deviceName}); '
+        'var inUse = typeof port.getLink === "function" && !!port.getLink(); item.interfaces.push({name:portNames[pi],in_use:inUse}); } '
+        'devices.push(item); } '
+        'var connections = []; var linkCount = net.getLinkCount(); '
+        'for (var li = 0; li < linkCount; li++) { var link = net.getLinkAt(li); var firstPort = link.getPort1(); var secondPort = link.getPort2(); '
+        'var firstOwner = null; var secondOwner = null; for (var oi = 0; oi < owners.length; oi++) { '
+        'if (owners[oi].port === firstPort) firstOwner = owners[oi].device; if (owners[oi].port === secondPort) secondOwner = owners[oi].device; } '
+        'connections.push({from:firstOwner,fromInterface:firstPort ? firstPort.getName() : null,to:secondOwner,toInterface:secondPort ? secondPort.getName() : null,type:typeof link.getConnectionType === "function" ? link.getConnectionType() : null}); } '
+        'return {success:true,result:{deviceCount:devices.length,connectionCount:connections.length,devices:devices,connections:connections}}; }; '
+        'this.ptGetNetwork = function() { try { reportResult(JSON.stringify(ptBuildNetworkSnapshot())); '
+        '} catch (error) { reportResult(JSON.stringify({success:false,error:"Error reading network: " + ptErrorText(error)})); } }; '
+        'this.ptGetDeviceInfo = function(name) { try { var snapshot = ptBuildNetworkSnapshot(); var devices = snapshot.result.devices; var connections = snapshot.result.connections; '
+        'for (var i = 0; i < devices.length; i++) { if (devices[i].name === name) { var related = []; '
+        'for (var j = 0; j < connections.length; j++) { if (connections[j].from === name || connections[j].to === name) related.push(connections[j]); } '
+        'reportResult(JSON.stringify({success:true,result:{device:devices[i],connections:related}})); return; } } '
+        'reportResult(JSON.stringify({success:false,error:"device not found: " + name})); '
+        '} catch (error) { reportResult(JSON.stringify({success:false,error:"Error reading device: " + ptErrorText(error)})); } }; '
+        'this.ptSetDevicePower = function(name, power) { try { var device = ipc.network().getDevice(name); '
+        'if (!device) { reportResult(JSON.stringify({success:false,error:"device not found: " + name})); return; } '
+        'if (typeof device.setPower !== "function") { reportResult(JSON.stringify({success:false,error:"device does not expose power control: " + name})); return; } '
+        'device.setPower(power); var actual = typeof device.getPower === "function" ? device.getPower() : power; '
+        'reportResult(JSON.stringify({success:true,device:name,power:actual})); '
+        '} catch (error) { reportResult(JSON.stringify({success:false,error:"Error setting device power: " + ptErrorText(error)})); } }; '
+        'this.ptSetSimulationMode = function(simulation) { try { var sim = ipc.simulation(); var current = sim.isSimulationMode(); '
+        'if (current !== simulation) sim.setSimulationMode(simulation); '
+        'reportResult(JSON.stringify({success:true,result:{mode:simulation ? "simulation" : "realtime",changed:current !== simulation}})); '
+        '} catch (error) { reportResult(JSON.stringify({success:false,error:"Error setting simulation mode: " + ptErrorText(error)})); } }; '
+        'this.ptGetSimulationStatus = function() { try { var sim = ipc.simulation(); var active = sim.isSimulationMode(); var state = {mode:active ? "simulation" : "realtime"}; '
+        'if (active) { state.currentTime = sim.getCurrentSimTime(); state.frameCount = sim.getFrameInstanceCount(); state.currentFrameIndex = sim.getCurrentFrameInstanceIndex(); } '
+        'reportResult(JSON.stringify({success:true,result:state})); '
+        '} catch (error) { reportResult(JSON.stringify({success:false,error:"Error reading simulation status: " + ptErrorText(error)})); } }; '
+        'this.ptStepSimulation = function(direction, steps) { try { var sim = ipc.simulation(); '
+        'if (!sim.isSimulationMode()) { reportResult(JSON.stringify({success:false,error:"Packet Tracer is not in simulation mode"})); return; } '
+        'if (direction === "reset") { sim.resetSimulation(); reportResult(JSON.stringify({success:true,result:{direction:"reset",steps:0,currentTime:0}})); return; } '
+        'for (var i = 0; i < steps; i++) { if (direction === "forward") sim.forward(); else if (direction === "backward") sim.backward(); else { reportResult(JSON.stringify({success:false,error:"unknown direction: " + direction})); return; } } '
+        'reportResult(JSON.stringify({success:true,result:{direction:direction,steps:steps,currentTime:sim.getCurrentSimTime(),frameCount:sim.getFrameInstanceCount()}})); '
+        '} catch (error) { reportResult(JSON.stringify({success:false,error:"Error stepping simulation: " + ptErrorText(error)})); } }; '
+        'this.ptSendPdu = function(source, destination) { try { '
+        'if (!ipc.network().getDevice(source)) { reportResult(JSON.stringify({success:false,error:"source device not found: " + source})); return; } '
+        'if (!ipc.network().getDevice(destination)) { reportResult(JSON.stringify({success:false,error:"destination device not found: " + destination})); return; } '
+        'var sim = ipc.simulation(); var enabled = false; if (!sim.isSimulationMode()) { sim.setSimulationMode(true); enabled = true; } '
+        'var errorCode = ipc.appWindow().getUserCreatedPDU().addSimplePdu(source, destination); var errorText = String(errorCode); '
+        'if (errorCode && errorText !== "0") { reportResult(JSON.stringify({success:false,error:"Packet Tracer rejected the PDU",errorCode:errorText})); return; } '
+        'reportResult(JSON.stringify({success:true,result:{source:source,destination:destination,trafficType:"ICMP",simulationModeEnabled:enabled}})); '
+        '} catch (error) { reportResult(JSON.stringify({success:false,error:"Error sending PDU: " + ptErrorText(error)})); } }; '
+        'this.ptGetPduResults = function(types) { try { var sim = ipc.simulation(); '
+        'if (!sim.isSimulationMode()) { reportResult(JSON.stringify({success:false,error:"Packet Tracer is not in simulation mode"})); return; } '
+        'var names = {"0":"ICMP","eTrafficType_Icmp":"ICMP","1":"TCP","eTrafficType_Tcp":"TCP","2":"UDP","eTrafficType_Udp":"UDP","3":"RIPv1","eTrafficType_RipV1":"RIPv1","4":"RIPv2","eTrafficType_RipV2":"RIPv2","5":"ARP","eTrafficType_Arp":"ARP","6":"CDP","eTrafficType_Cdp":"CDP","7":"DHCP","eTrafficType_Dhcp":"DHCP","11":"STP","eTrafficType_Stp":"STP","12":"OSPF","eTrafficType_Ospf":"OSPF","13":"DTP","eTrafficType_Dtp":"DTP","17":"HTTP","eTrafficType_Http":"HTTP","18":"HTTPS","eTrafficType_Https":"HTTPS","19":"DNS","eTrafficType_Dns":"DNS","36":"BGP","eTrafficType_Bgp":"BGP","1000":"Custom","eTrafficType_Custom":"Custom"}; '
+        'var filter = null; if (types && types.length) { filter = {}; for (var ti = 0; ti < types.length; ti++) filter[String(types[ti]).toUpperCase()] = true; } '
+        'var total = sim.getFrameInstanceCount(); var frames = []; for (var i = 0; i < total; i++) { var frame = sim.getFrameInstanceAt(i); if (!frame) continue; '
+        'var rawType = String(frame.getUserTrafficType()); var trafficType = names[rawType] || rawType; if (filter && !filter[trafficType.toUpperCase()]) continue; var status = "unknown"; '
+        'if (typeof frame.isFrameAccepted === "function" && frame.isFrameAccepted()) status = "accepted"; else if (typeof frame.isFrameDropped === "function" && frame.isFrameDropped()) status = "dropped"; '
+        'else if (typeof frame.isFrameNotForwarded === "function" && frame.isFrameNotForwarded()) status = "not_forwarded"; else if (typeof frame.isFrameUnexpected === "function" && frame.isFrameUnexpected()) status = "unexpected"; '
+        'else if ((typeof frame.isFrameCollidedOnLink === "function" && frame.isFrameCollidedOnLink()) || (typeof frame.isFrameCollidedAtDevice === "function" && frame.isFrameCollidedAtDevice())) status = "collision"; '
+        'else if (typeof frame.isFrameBuffered === "function" && frame.isFrameBuffered()) status = "buffered"; else if (typeof frame.isFrameOnTransit === "function" && frame.isFrameOnTransit()) status = "in_transit"; else if (typeof frame.isFrameSent === "function" && frame.isFrameSent()) status = "sent"; '
+        'frames.push({index:i,source:frame.getSourceString(),destination:frame.getDestinationString(),trafficType:trafficType,status:status}); } '
+        'reportResult(JSON.stringify({success:true,result:{totalFrames:total,shown:frames.length,frames:frames}})); '
+        '} catch (error) { reportResult(JSON.stringify({success:false,error:"Error reading PDU results: " + ptErrorText(error)})); } }; '
+        'this.ptGetCommandLog = function(deviceName, limit) { try { var commandLog = ipc.commandLog(); var total = commandLog.getEntryCount(); var entries = []; '
+        'for (var i = total - 1; i >= 0 && entries.length < limit; i--) { var entry = commandLog.getEntryAt(i); if (!entry) continue; var device = entry.getDeviceName(); if (deviceName && device !== deviceName) continue; '
+        'entries.push({timestamp:entry.getTimeToString(),device:device,prompt:entry.getPrompt(),command:entry.getCommand(),resolvedCommand:entry.getResolvedCommand()}); } '
+        'reportResult(JSON.stringify({success:true,result:{totalEntries:total,returned:entries.length,entries:entries}})); '
+        '} catch (error) { reportResult(JSON.stringify({success:false,error:"Error reading command log: " + ptErrorText(error)})); } };'
     )
 
     # Internal singleton bridge - started automatically inside the MCP process
@@ -918,18 +1113,24 @@ def register_tools(mcp: FastMCP) -> None:
     _patches_applied: list[bool] = [False]  # list for mutation in closures
 
     def _http_get(url: str, timeout: float = 2.0):
+        if not url.startswith(f"{_BRIDGE_URL}/"):
+            return None, None
         try:
-            with urllib.request.urlopen(url, timeout=timeout) as r:
+            # The prefix guard above restricts this B310 sink to the loopback bridge.
+            with urllib.request.urlopen(url, timeout=timeout) as r:  # nosec B310
                 return r.status, r.read().decode("utf-8")
         except Exception:
             return None, None
 
     def _http_post(url: str, body: str, timeout: float = 3.0):
+        if not url.startswith(f"{_BRIDGE_URL}/"):
+            return None, None
         try:
             data = body.encode("utf-8")
             req = urllib.request.Request(url, data=data, method="POST")
             req.add_header("Content-Type", "text/plain")
-            with urllib.request.urlopen(req, timeout=timeout) as r:
+            # The prefix guard above restricts this B310 sink to the loopback bridge.
+            with urllib.request.urlopen(req, timeout=timeout) as r:  # nosec B310
                 return r.status, r.read().decode("utf-8")
         except Exception:
             return None, None
@@ -947,8 +1148,9 @@ def register_tools(mcp: FastMCP) -> None:
                     # PT disconnected - reset flag to reapply patches on reconnect
                     _patches_applied[0] = False
                 return connected
-            except Exception:
-                pass
+            except (json.JSONDecodeError, TypeError, AttributeError):
+                _patches_applied[0] = False
+                return False
         return False
 
     def _ensure_pt_patches() -> None:
@@ -1160,9 +1362,220 @@ def register_tools(mcp: FastMCP) -> None:
         _ensure_pt_patches()
         return None
 
+    def _call_live_json(js_call: str, timeout: float = 10.0) -> dict:
+        """Run one patched Packet Tracer function and decode its object result."""
+        bridge_error = _check_bridge()
+        if bridge_error:
+            return {"success": False, "error": bridge_error}
+
+        raw_result = _bridge_send_and_wait(js_call, timeout=timeout)
+        if raw_result is None:
+            return {
+                "success": False,
+                "error": "No response from Packet Tracer before the bridge timeout.",
+            }
+        try:
+            payload = json.loads(raw_result)
+        except json.JSONDecodeError:
+            return {
+                "success": False,
+                "error": "Packet Tracer returned a non-JSON response.",
+                "raw_response": raw_result,
+            }
+        if not isinstance(payload, dict):
+            return {
+                "success": False,
+                "error": "Packet Tracer returned JSON that was not an object.",
+            }
+        return payload
+
+    def _render_live_json(payload: dict) -> str:
+        return json.dumps(payload, indent=2, ensure_ascii=False)
+
     # ------------------------------------------------------------------
     # QUERY / INTERACT with an existing topology in PT
     # ------------------------------------------------------------------
+
+    @mcp.tool()
+    def pt_add_device(
+        device_name: str,
+        model: str,
+        x: int,
+        y: int,
+    ) -> str:
+        """Add one catalog-validated device to the active logical workspace.
+
+        Parameters:
+        - device_name: unique name for the new device
+        - model: exact model or catalog alias; call pt_list_devices to discover values
+        - x: logical workspace X coordinate
+        - y: logical workspace Y coordinate
+        """
+        normalized_name = (device_name or "").strip()
+        if not normalized_name:
+            return _json_tool_error("device_name must not be empty")
+
+        normalized_model = (model or "").strip()
+        device_model = resolve_model(normalized_model)
+        if device_model is None:
+            return _json_tool_error(
+                f"Unknown device model: {normalized_model}. "
+                "Call pt_list_devices for valid models."
+            )
+
+        device_type = PT_DEVICE_TYPE.get(
+            device_model.category,
+            PT_DEVICE_TYPE_DEFAULT,
+        )
+        js_call = (
+            f"ptAddDevice({json.dumps(normalized_name)},{device_type},"
+            f"{json.dumps(device_model.pt_type)},{int(x)},{int(y)})"
+        )
+        return _render_live_json(_call_live_json(js_call, timeout=12.0))
+
+    @mcp.tool()
+    def pt_add_link(
+        device_a: str,
+        port_a: str,
+        device_b: str,
+        port_b: str,
+        cable: str = "auto",
+    ) -> str:
+        """Connect two free interfaces in the active logical workspace.
+
+        Parameters:
+        - device_a: exact first device name
+        - port_a: exact first interface name
+        - device_b: exact second device name
+        - port_b: exact second interface name
+        - cable: target cable catalog key; defaults to auto
+        """
+        endpoints = {
+            "device_a": (device_a or "").strip(),
+            "port_a": (port_a or "").strip(),
+            "device_b": (device_b or "").strip(),
+            "port_b": (port_b or "").strip(),
+        }
+        empty_field = next((key for key, value in endpoints.items() if not value), None)
+        if empty_field:
+            return _json_tool_error(f"{empty_field} must not be empty")
+
+        normalized_cable = (cable or "").strip().lower()
+        cable_type = PT_CONNECT_TYPE.get(normalized_cable)
+        if cable_type is None:
+            valid_cables = ", ".join(sorted(CABLE_TYPES))
+            return _json_tool_error(
+                f"Unknown cable type: {normalized_cable}. Valid cable types: {valid_cables}"
+            )
+
+        js_call = (
+            f"ptAddLink({json.dumps(endpoints['device_a'])},"
+            f"{json.dumps(endpoints['port_a'])},{json.dumps(endpoints['device_b'])},"
+            f"{json.dumps(endpoints['port_b'])},{cable_type})"
+        )
+        return _render_live_json(_call_live_json(js_call, timeout=12.0))
+
+    @mcp.tool()
+    def pt_get_network() -> str:
+        """Return all live devices, interfaces, occupancy flags, and links as JSON."""
+        return _render_live_json(_call_live_json("ptGetNetwork()", timeout=12.0))
+
+    @mcp.tool()
+    def pt_get_device_info(device_name: str) -> str:
+        """Return one live device and all of its incident connections as JSON."""
+        normalized_name = (device_name or "").strip()
+        if not normalized_name:
+            return _json_tool_error("device_name must not be empty")
+        js_call = f"ptGetDeviceInfo({json.dumps(normalized_name)})"
+        return _render_live_json(_call_live_json(js_call, timeout=12.0))
+
+    @mcp.tool()
+    def pt_set_device_power(device_name: str, power: bool) -> str:
+        """Power one live Packet Tracer device on or off."""
+        normalized_name = (device_name or "").strip()
+        if not normalized_name:
+            return _json_tool_error("device_name must not be empty")
+        power_literal = "true" if power else "false"
+        js_call = f"ptSetDevicePower({json.dumps(normalized_name)},{power_literal})"
+        return _render_live_json(_call_live_json(js_call, timeout=12.0))
+
+    @mcp.tool()
+    def pt_set_simulation_mode(simulation: bool) -> str:
+        """Switch Packet Tracer to simulation mode or realtime mode."""
+        simulation_literal = "true" if simulation else "false"
+        js_call = f"ptSetSimulationMode({simulation_literal})"
+        return _render_live_json(_call_live_json(js_call))
+
+    @mcp.tool()
+    def pt_get_simulation_status() -> str:
+        """Return simulation mode, time, frame count, and current frame index."""
+        return _render_live_json(_call_live_json("ptGetSimulationStatus()"))
+
+    @mcp.tool()
+    def pt_step_simulation(direction: str, steps: int = 1) -> str:
+        """Advance, rewind, or reset Packet Tracer simulation state.
+
+        Parameters:
+        - direction: forward, backward, or reset
+        - steps: integer from 1 through 100; ignored by reset
+        """
+        normalized_direction = (direction or "").strip().lower()
+        if normalized_direction not in {"forward", "backward", "reset"}:
+            return _json_tool_error(
+                "direction must be one of: forward, backward, reset"
+            )
+        if steps < 1 or steps > 100:
+            return _json_tool_error("steps must be between 1 and 100")
+        js_call = f"ptStepSimulation({json.dumps(normalized_direction)},{int(steps)})"
+        return _render_live_json(_call_live_json(js_call, timeout=15.0))
+
+    @mcp.tool()
+    def pt_send_pdu(source_device: str, destination_device: str) -> str:
+        """Add a native simple ICMP PDU between two live devices."""
+        source = (source_device or "").strip()
+        destination = (destination_device or "").strip()
+        if not source:
+            return _json_tool_error("source_device must not be empty")
+        if not destination:
+            return _json_tool_error("destination_device must not be empty")
+        js_call = f"ptSendPdu({json.dumps(source)},{json.dumps(destination)})"
+        return _render_live_json(_call_live_json(js_call, timeout=12.0))
+
+    @mcp.tool()
+    def pt_get_pdu_results(traffic_types: list[str] | None = None) -> str:
+        """Return native simulation-frame outcomes, optionally filtered by type.
+
+        Supported filters: ARP, BGP, CDP, Custom, DHCP, DNS, DTP, HTTP, HTTPS,
+        ICMP, OSPF, RIPv1, RIPv2, STP, TCP, and UDP.
+        """
+        normalized_types: list[str] = []
+        for traffic_type in traffic_types or []:
+            normalized_type = str(traffic_type).strip().upper()
+            if normalized_type not in _SUPPORTED_PDU_TRAFFIC_TYPES:
+                return _json_tool_error(
+                    f"Unsupported traffic type: {normalized_type}"
+                )
+            if normalized_type not in normalized_types:
+                normalized_types.append(normalized_type)
+        js_call = f"ptGetPduResults({json.dumps(normalized_types)})"
+        return _render_live_json(_call_live_json(js_call, timeout=12.0))
+
+    @mcp.tool()
+    def pt_get_command_log(device_name: str = "", limit: int = 50) -> str:
+        """Return newest Packet Tracer IOS command-log entries as redacted JSON.
+
+        Password prompts and recognized secret-bearing IOS commands are redacted.
+
+        Parameters:
+        - device_name: optional exact device filter
+        - limit: maximum returned entries from 1 through 500
+        """
+        if limit < 1 or limit > 500:
+            return _json_tool_error("limit must be between 1 and 500")
+        normalized_name = (device_name or "").strip()
+        js_call = f"ptGetCommandLog({json.dumps(normalized_name)},{int(limit)})"
+        payload = _call_live_json(js_call, timeout=12.0)
+        return _render_live_json(_redact_command_log_payload(payload))
 
     @mcp.tool()
     def pt_query_topology() -> str:
@@ -2617,7 +3030,8 @@ def register_tools(mcp: FastMCP) -> None:
             result = add_static_routes_uc(router, [route], confirm_send=confirm_fn, dry_run=dry_run)
         except (ValueError, KeyError, TypeError) as exc:
             return json.dumps({"error": f"Invalid static-route input: {exc}"}, indent=2, ensure_ascii=False)
-        kind = "default route" if destination == "0.0.0.0" and mask == "0.0.0.0" else f"static route {destination}/{mask}"
+        # These literals describe a route prefix; they are not server bind addresses.
+        kind = "default route" if destination == "0.0.0.0" and mask == "0.0.0.0" else f"static route {destination}/{mask}"  # nosec B104
         return _feature_response(kind, router, router, result, dry_run, bridge_ok)
 
     @mcp.tool()
@@ -3379,8 +3793,8 @@ def register_tools(mcp: FastMCP) -> None:
                 full = rj.get("o", "")
                 out = full[base:] if len(full) >= base else full
                 prompt = rj.get("p", "")
-            except Exception:
-                pass
+            except (json.JSONDecodeError, TypeError, AttributeError):
+                last = out
             if out.rstrip().endswith("--More--"):
                 paged = True
                 _cl('cl.enterChar(" "); reportResult("");')   # advance one page
@@ -3669,8 +4083,8 @@ def register_tools(mcp: FastMCP) -> None:
         chosen = port_index
         try:
             chosen = json.loads(res).get("port_index", port_index)
-        except Exception:
-            pass
+        except (json.JSONDecodeError, TypeError, AttributeError):
+            chosen = port_index
         note = None
         if applied is False:
             note = ("The located port exposed no setChannel/setBandwidth setter, so nothing "

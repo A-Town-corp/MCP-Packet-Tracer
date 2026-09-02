@@ -83,6 +83,26 @@ source and copyright. Adapted Packet Tracer API mappings remain attributable to
 Muhammad Balawal; copied substantial source would require retaining his MIT
 notice.
 
+## Implementation Outcome
+
+The adopted surface is implemented in
+`src/packet_tracer_mcp/adapters/mcp/tool_registry.py` without adding a Python
+dependency or replacing the target extension. The registered tool count moves
+from **60 to 71**, and `pt://capabilities` now advertises incremental live
+topology changes, simulation control, native PDU inspection, and command-log
+access.
+
+Offline FastMCP tests drive every new public tool through a fake loopback bridge,
+verify generated JavaScript escaping and catalog enum use, cover invalid model,
+cable, direction, step-count, traffic-type, and log-limit inputs, and require
+credential redaction. The final report must treat live Packet Tracer execution
+as unverified until a connected application runs the native `ipc` calls.
+
+Final local verification on Python `3.13` returned `389 passed`; Bandit reported
+no issues, `pip-audit` reported no known dependency vulnerabilities, and the
+wheel and source distribution both include the upstream MIT notice. The entire
+injected JavaScript runtime patch also passed `node --check -`.
+
 ## Sources
 
 [^1]: [cisco-pt-mcp at `4b277cb`](https://github.com/muhammadbalawal/cisco-pt-mcp/tree/4b277cba5d6ef5cee2d4fc6fa1768206eb841e8e) — upstream repository tree, README, package metadata, extension, and tests.

@@ -24,7 +24,10 @@ New topology:
   Or simplified: pt_full_build (runs the whole pipeline in a single step)
 
 Interact with an existing topology in PT:
-  pt_bridge_status -> pt_query_topology -> (pt_rename_device / pt_move_device / pt_delete_device)
+  pt_bridge_status -> pt_get_network -> (pt_add_device / pt_add_link / pt_rename_device / pt_move_device / pt_delete_device)
+
+Verify traffic with native simulation:
+  pt_set_simulation_mode -> pt_send_pdu -> pt_step_simulation -> pt_get_pdu_results
 
 Add modules to already placed routers:
   pt_query_topology -> pt_list_modules(router_model="2911") -> pt_install_modules_batch
@@ -96,7 +99,7 @@ Individual calls may time out the bridge bootstrap if the reboot exceeds 5s.
 
 ## Important
 - The PT script engine accepts: addDevice, addLink, addModule, configureIosDevice, configurePcIp.
-- The MCP exposes 60 tools across 19 groups. Use `pt_full_build` for the general case (new topology with configs).
+- The MCP exposes 71 tools across 20 groups. Use `pt_full_build` for the general case (new topology with configs).
 - To create ONLY the physical topology without configuring IPs/OSPF/DHCP, send `dhcp_pools=[]`,
   `static_routes=[]`, `ospf_configs=[]`, etc. and leave `interfaces={}` in each DevicePlan.
 - If the user asks for something not in the catalog, report it clearly instead of inventing.

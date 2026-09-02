@@ -44,3 +44,14 @@
 - **Rejected:** Copy upstream `.github/workflows/publish.yml`, because its OIDC
   environment requires repository-specific PyPI trusted-publisher ownership.
 
+## ADR-005 — Redact command-log credentials
+
+- **Status:** Accepted on 2026-09-02.
+- **Rule:** `pt_get_command_log` redacts commands entered at password, secret,
+  or passphrase prompts and redacts recognized IOS secret-bearing command
+  values before serializing the MCP response.
+- **Why:** Packet Tracer command history can contain enable secrets, line
+  passwords, username credentials, SNMP community strings, TACACS+ keys,
+  RADIUS keys, key strings, and ISAKMP pre-shared keys.
+- **Rejected:** Return the upstream command log unchanged. That would expose
+  credentials to the MCP conversation and client logs.

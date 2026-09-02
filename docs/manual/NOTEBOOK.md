@@ -74,3 +74,35 @@ network without falling back to arbitrary JavaScript.
   missing; behavior tests raised `ToolError: Unknown tool` for the same names.
 - Installed MCP package inspected before using its API: `mcp==1.27.2`;
   `FastMCP.call_tool(name, arguments)` is the exercised public test path.
+
+### 2026-09-02 — TDD GREEN and review
+
+- The default `python` command initially imported
+  `E:\MCP-Packet-Tracer\src\packet_tracer_mcp` rather than this checkout.
+  Setting `PYTHONPATH` to
+  `C:\Users\Fonem\MCP-Packet-Tracer\src` made the test target explicit.
+- Focused command:
+  `python -m pytest -q tests/test_tool_registration.py tests/test_upstream_capabilities.py`
+  returned `22 passed in 1.92s` after implementation and security hardening.
+- Final Python `3.13` command:
+  `coverage run --source=src/packet_tracer_mcp -m pytest -q` returned
+  `389 passed in 5.12s`.
+- `node --check -` parsed the complete injected `_RUNTIME_PATCHES_JS` bundle
+  and returned exit code `0`.
+- `pip-audit==2.10.1` reported `No known vulnerabilities found`; the local
+  editable package was skipped because version `0.5.0` is not the current PyPI
+  artifact.
+- `bandit==1.9.4` initially found seven pre-existing warnings in
+  `tool_registry.py`. Loopback URL sinks now have an enforced bridge-prefix
+  guard, silent `except: pass` paths now use specific JSON fallback handling,
+  and the route-literal false positive is documented. The rerun reported
+  `No issues identified`.
+- Full-suite line coverage is `64%` (`3022/4751` statements). Executable lines
+  changed in `tool_registry.py` are `89.0%` covered (`121/136`). The global
+  shortfall is captured in `BACKLOG.md` rather than presented as complete.
+- Python `3.13` package build succeeded with `build==1.6.0`, producing
+  `packet_tracer_mcp-0.5.0.tar.gz` and
+  `packet_tracer_mcp-0.5.0-py3-none-any.whl`.
+- Wheel and source-distribution inspection confirmed that both `LICENSE` and
+  `THIRD_PARTY_NOTICES.md` are included. Hatchling `1.32.0` reads the explicit
+  `project.license-files` declaration from `pyproject.toml`.

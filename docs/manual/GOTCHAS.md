@@ -7,6 +7,7 @@
 | Bridge result messages have no request ID | A late response can satisfy the next request | `_bridge_send_and_wait()` drains stale results before queueing and serializes request/response use |
 | Script Engine error popups terminate polling | A malformed command can disconnect all live tools | Compose commands with `json.dumps`, validate enums in Python, and keep generated JavaScript on one line |
 | Packet Tracer traffic types can be numeric or enum strings | A PDU filter can miss equivalent frames | Map both forms, for example `0` and `eTrafficType_Icmp`, to `ICMP` |
+| Packet Tracer command history can contain credentials | `getCommand()` and `getResolvedCommand()` can expose secrets to MCP clients | Redact password prompts and recognized secret-bearing IOS commands in Python before response serialization |
 | Upstream Socket.IO bridge has open issue `#1` on Packet Tracer `9.0.0` | Its installable bridge window can render blank and never bind port `7531` | Do not replace the target bridge with the upstream transport |
 | `packet-tracer-mcp` is occupied on PyPI | A tag workflow can publish to a package owned by another repository or fail OIDC verification | Do not add publishing automation until package ownership is documented |
-
+| This workstation has another editable checkout at `E:\MCP-Packet-Tracer` | A bare `python -m pytest` can import the wrong source tree | Install this checkout in an isolated environment or set `PYTHONPATH` to this repository's `src` directory before verification |

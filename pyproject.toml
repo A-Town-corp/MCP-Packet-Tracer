@@ -9,6 +9,7 @@ description = "MCP server for Cisco Packet Tracer - plan, validate, generate, de
 readme = "README.md"
 requires-python = ">=3.11"
 license = { text = "MIT" }
+license-files = ["LICENSE", "THIRD_PARTY_NOTICES.md"]
 authors = [{ name = "Mateo" }]
 keywords = [
     "mcp",

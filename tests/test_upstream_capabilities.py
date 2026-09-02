@@ -11,6 +11,7 @@ import pytest
 from mcp.server.fastmcp import FastMCP
 
 from packet_tracer_mcp.adapters.mcp import tool_registry
+from packet_tracer_mcp.shared.constants import CAPABILITIES
 
 
 class _FakeResponse:
@@ -89,6 +90,15 @@ def test_add_device_uses_catalog_type_and_escapes_name(live_tools):
 
     assert result["success"] is True
     assert 'ptAddDevice("R\\\"1",0,"2911",120,240)' in bridge.queued_commands[-1]
+
+
+def test_capabilities_advertise_adopted_live_controls():
+    assert {
+        "live_incremental_topology",
+        "simulation_control",
+        "native_pdu",
+        "command_log",
+    } <= set(CAPABILITIES["features"])
 
 
 def test_add_device_rejects_unknown_model_without_queueing(live_tools):
@@ -216,6 +226,7 @@ def test_runtime_patch_contains_native_packet_tracer_apis(live_tools):
     assert "ipc.commandLog()" in runtime_patch
     assert "getConnectionType" in runtime_patch
     assert "setPower" in runtime_patch
+    assert "Packet Tracer did not create the link" in runtime_patch
 
 
 def test_command_log_redacts_secret_values(live_tools):

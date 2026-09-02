@@ -32,7 +32,9 @@ dependency resolver error.
 ```
 
 Expected result: pytest exits `0`; the build command creates one wheel and one
-source distribution under `dist\` and exits `0`.
+source distribution under `dist\` and exits `0`. At commit containing the
+`cisco-pt-mcp` capability fold, pytest reports `389 passed`, and both archives
+contain `LICENSE` and `THIRD_PARTY_NOTICES.md`.
 
 ## Run with stdio
 
@@ -60,4 +62,3 @@ Expected endpoint: `http://127.0.0.1:39000/mcp`.
    `pt_bridge_status` in **Extensions > Builder Code Editor**.
 4. Call `pt_bridge_status`; require the exact state `Bridge ACTIVE and CONNECTED`
    before running live tools.
-
