@@ -5,13 +5,13 @@ MCP protocol layer - registers the tools and resources that the LLM can invoke.
 ## Files
 
 ### `tool_registry.py`
-**~1050 lines** - Monolithic registry of the 22 MCP tools.
+Registers 71 MCP tools.
 
 Main function: `register_tools(mcp: FastMCP) -> None`
 
 Each tool is defined as a function decorated with `@mcp.tool()` inside `register_tools()`.
 
-#### Registered tools (22)
+#### Selected registered tools (34 of 71)
 
 | Group | Tool | Description |
 |-------|------|-------------|
@@ -32,12 +32,23 @@ Each tool is defined as a function decorated with `@mcp.tool()` inside `register
 | **Bridge** | `pt_bridge_status` | Verify connection with PT |
 | **Projects** | `pt_list_projects` | List saved topologies |
 | | `pt_load_project` | Load a project by name |
-| **Interaction** | `pt_query_topology` | Query current devices/links in PT |
+| **Interaction** | `pt_add_device` | Add one catalog-validated live device |
+| | `pt_add_link` | Add one catalog-validated live link |
+| | `pt_query_topology` | Query current devices in PT |
+| | `pt_get_network` | Query devices, ports, occupancy and links |
+| | `pt_get_device_info` | Query one device and incident links |
 | | `pt_delete_device` | Delete a device |
 | | `pt_rename_device` | Rename a device |
 | | `pt_move_device` | Move a device on the canvas |
+| | `pt_set_device_power` | Power a device on or off |
 | | `pt_delete_link` | Delete a link |
 | | `pt_send_raw` | Send arbitrary JS to the Script Engine |
+| **Simulation** | `pt_set_simulation_mode` | Select simulation or realtime mode |
+| | `pt_get_simulation_status` | Read simulation state and frame position |
+| | `pt_step_simulation` | Advance, rewind or reset simulation |
+| | `pt_send_pdu` | Add a native simple ICMP PDU |
+| | `pt_get_pdu_results` | Read and filter simulation-frame outcomes |
+| | `pt_get_command_log` | Read redacted IOS command-log entries |
 
 #### Internal helpers
 - `_http_get(url)` / `_http_post(url, data)` - HTTP communication with the bridge

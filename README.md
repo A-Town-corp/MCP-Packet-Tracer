@@ -16,7 +16,7 @@
 
 <table>
 <tr>
-<td align="center"><strong>60 MCP Tools</strong></td>
+<td align="center"><strong>71 MCP Tools</strong></td>
 <td align="center"><strong>5 MCP Resources</strong></td>
 <td align="center"><strong>74 Device Models</strong></td>
 <td align="center"><strong>150 Modules</strong></td>
@@ -82,7 +82,7 @@
 - [Installation](#-installation)
 - [Quick Start](#-quick-start)
 - [How It Works](#-how-it-works)
-- [MCP Tools (60)](#-mcp-tools)
+- [MCP Tools (71)](#-mcp-tools)
 - [MCP Resources (5)](#-mcp-resources)
 - [Live Deploy Setup](#-live-deploy-setup)
 - [Supported Devices (74)](#-supported-devices)
@@ -102,7 +102,7 @@
 
 ## ◈ What It Does
 
-A **Model Context Protocol (MCP) server** that gives any MCP-capable LLM client (GitHub Copilot, Claude Code, Claude Desktop, Codex CLI, Cursor) full programmatic control over Cisco Packet Tracer. 60 MCP tools and 5 MCP resources cover the complete workflow:
+A **Model Context Protocol (MCP) server** that gives any MCP-capable LLM client (GitHub Copilot, Claude Code, Claude Desktop, Codex CLI, Cursor) full programmatic control over Cisco Packet Tracer. 71 MCP tools and 5 MCP resources cover the complete workflow:
 
 ```
 Natural language prompt
@@ -366,7 +366,7 @@ Port 39000 was chosen to avoid collisions with common ports (3000, 5000, 8000, 8
 
 ## ◈ MCP Tools
 
-60 tools across 19 groups. Groups 1-12 cover the **plan → deploy** pipeline; groups 13-19 **live-configure** any device already on the canvas (they talk to the HTTP bridge directly, so they work on a freshly built topology or one you opened by hand).
+71 tools across 20 groups. Groups 1-12 cover the **plan → deploy** pipeline; groups 13-20 **live-configure, inspect, and simulate** any topology already on the canvas (they talk to the HTTP bridge directly, so they work on a freshly built topology or one you opened by hand).
 
 ### Catalog
 
@@ -425,12 +425,28 @@ Port 39000 was chosen to avoid collisions with common ports (3000, 5000, 8000, 8
 
 | Tool | Description |
 |------|-------------|
+| `pt_add_device` | Adds one catalog-validated device to the active logical workspace |
+| `pt_add_link` | Connects two free interfaces with a catalog-validated cable |
 | `pt_query_topology` | Reads currently loaded devices from Packet Tracer |
+| `pt_get_network` | Returns devices, interfaces, occupancy flags and live connections as JSON |
+| `pt_get_device_info` | Returns one device and its incident connections as JSON |
 | `pt_delete_device` | Removes a device and all its links from PT |
 | `pt_rename_device` | Renames a device in the active topology |
 | `pt_move_device` | Moves a device to new canvas coordinates |
+| `pt_set_device_power` | Powers a live device on or off |
 | `pt_delete_link` | Removes the link on a specific interface |
 | `pt_send_raw` | Sends arbitrary JavaScript to the PT Script Engine |
+
+### Simulation & Packet Inspection
+
+| Tool | Description |
+|------|-------------|
+| `pt_set_simulation_mode` | Switches Packet Tracer between simulation and realtime mode |
+| `pt_get_simulation_status` | Returns mode, simulation time, frame count and current frame index |
+| `pt_step_simulation` | Advances, rewinds or resets the simulation |
+| `pt_send_pdu` | Adds a native simple ICMP PDU between two devices |
+| `pt_get_pdu_results` | Returns filtered frame outcomes such as accepted, dropped or in transit |
+| `pt_get_command_log` | Returns newest IOS command-log entries with secret values redacted |
 
 ### Export & Projects
 
@@ -1033,7 +1049,7 @@ Templates are hints that guide the orchestrator's topology-building logic.
 src/packet_tracer_mcp/
 +-- adapters/
 |   +-- mcp/
-|       +-- tool_registry.py       # All 60 MCP tools (@mcp.tool decorators)
+|       +-- tool_registry.py       # All 71 MCP tools (@mcp.tool decorators)
 |       +-- resource_registry.py   # All 5 MCP resources (@mcp.resource decorators)
 |
 +-- application/
