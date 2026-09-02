@@ -40,3 +40,15 @@ projects/
 .vscode/settings.json
 *.log
 
+# Secrets & credentials
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+*.p12
+*.pfx
+*credentials*.json
+secrets.yml
+secrets.yaml
+

@@ -1,0 +1,29 @@
+# Dependabot configuration for MCP-Packet-Tracer
+# Docs: https://docs.github.com/en/code-security/dependabot/dependabot-version-updates/configuration-options-for-the-dependabot.yml-file
+version: 2
+updates:
+  # Python dependencies (pyproject.toml)
+  - package-ecosystem: "pip"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+    open-pull-requests-limit: 10
+    labels:
+      - "dependencies"
+      - "python"
+
+  # NOTE: The JavaScript/HTML assets under "UI HELPER/" are vendored files
+  # (e.g. bootstrap.bundle.min.js) without an npm manifest, so there is no
+  # package.json for Dependabot's "npm" ecosystem to scan. If a package.json
+  # is introduced for that tooling in the future, add an "npm" entry here
+  # pointing at its directory to enable JavaScript dependency updates.
+
+  # GitHub Actions workflow dependencies
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+    open-pull-requests-limit: 10
+    labels:
+      - "dependencies"
+      - "github-actions"
