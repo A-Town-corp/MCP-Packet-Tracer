@@ -55,21 +55,9 @@ which is proprietary software maintained by Cisco/Netacad.
 
 This repository uses the following automated security tooling:
 
-- **Dependabot** for grouped Python and GitHub Actions dependency updates.
-- **Verified patch updates:** Dependabot patch pull requests are approved for
-  auto-merge only after the repository's required checks pass. Minor and major
-  updates always require maintainer review.
-- **CodeQL default setup** static analysis for Python, JavaScript, and GitHub
-  Actions, with Copilot Autofix enabled in the repository's code-security
-  settings.
-- **Dependency review** rejects pull requests that introduce dependencies with
-  known moderate-or-higher vulnerabilities or disallowed licenses.
-- **Scheduled Python audits** detect newly disclosed vulnerabilities even when
-  no dependency file has changed.
-- **Secret scanning** and **push protection** should be enabled in GitHub's
-  repository settings to help prevent credentials from being committed.
-
-The required GitHub-side configuration and branch-protection checks are
-documented in [the repository hardening guide](.github/SECURITY_HARDENING.md).
+- **Dependabot** for dependency updates and vulnerability alerts.
+- **CodeQL** static analysis for Python on pushes and pull requests to `main`.
+- **Secret scanning** and **push protection** (GitHub-provided) to help
+  prevent credentials from being committed.
 
 Thank you for helping keep this project and its users safe.
