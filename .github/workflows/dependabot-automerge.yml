@@ -19,7 +19,7 @@ jobs:
       # This privileged workflow deliberately never checks out or executes PR code.
       - name: Read Dependabot metadata
         id: metadata
-        uses: dependabot/fetch-metadata@v2
+        uses: dependabot/fetch-metadata@v3
         with:
           github-token: ${{ secrets.GITHUB_TOKEN }}
 
