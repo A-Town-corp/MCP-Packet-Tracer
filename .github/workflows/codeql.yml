@@ -1,16 +1,15 @@
-name: "CodeQL"
+name: "CodeQL advanced setup (disabled)"
 
 on:
-  push:
-    branches: [ "main" ]
-  pull_request:
-    branches: [ "main" ]
-  schedule:
-    - cron: '30 4 * * 1'
+  # CodeQL default setup owns automatic scanning for this repository. Keeping
+  # this legacy workflow manual prevents duplicate `(push)` analyses while
+  # preserving the file so target-branch edits can merge normally.
+  workflow_dispatch:
 
 jobs:
   analyze:
     name: Analyze (${{ matrix.language }})
+    if: ${{ false }} # Do not run advanced setup alongside default setup.
     runs-on: ubuntu-latest
     permissions:
       actions: read
