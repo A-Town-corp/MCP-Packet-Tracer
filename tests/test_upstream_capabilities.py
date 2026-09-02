@@ -218,6 +218,50 @@ def test_runtime_patch_contains_native_packet_tracer_apis(live_tools):
     assert "setPower" in runtime_patch
 
 
+def test_command_log_redacts_secret_values(live_tools):
+    mcp, bridge = live_tools
+    bridge.queue_result({
+        "success": True,
+        "result": {
+            "totalEntries": 3,
+            "returned": 3,
+            "entries": [
+                {
+                    "device": "R1",
+                    "prompt": "R1(config)#",
+                    "command": "enable secret swordfish",
+                    "resolvedCommand": "enable secret swordfish",
+                },
+                {
+                    "device": "R1",
+                    "prompt": "Password:",
+                    "command": "hunter2",
+                    "resolvedCommand": "hunter2",
+                },
+                {
+                    "device": "R1",
+                    "prompt": "R1#",
+                    "command": "show ip route",
+                    "resolvedCommand": "show ip route",
+                },
+            ],
+        },
+    })
+
+    result = json.loads(_call_text(
+        mcp,
+        "pt_get_command_log",
+        {"device_name": "R1", "limit": 25},
+    ))
+
+    entries = result["result"]["entries"]
+    assert entries[0]["command"] == "enable secret [REDACTED]"
+    assert entries[0]["resolvedCommand"] == "enable secret [REDACTED]"
+    assert entries[1]["command"] == "[REDACTED]"
+    assert entries[1]["resolvedCommand"] == "[REDACTED]"
+    assert entries[2]["command"] == "show ip route"
+
+
 @pytest.mark.parametrize(
     ("tool_name", "arguments", "error_fragment"),
     [
