@@ -35,8 +35,27 @@ jobs:
         with:
           languages: ${{ matrix.language }}
           build-mode: ${{ matrix.build-mode }}
+          config-file: ./.github/codeql/codeql-config.yml
 
       - name: Perform CodeQL Analysis
         uses: github/codeql-action/analyze@v3
         with:
           category: "/language:${{ matrix.language }}"
+
+  enable-copilot-autofix:
+    name: Enable Copilot Autofix
+    if: github.event_name != 'pull_request'
+    needs: analyze
+    runs-on: ubuntu-latest
+    permissions:
+      security-events: write
+
+    steps:
+      - name: Enable Copilot Autofix for CodeQL alerts
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh api \
+            --method PATCH \
+            "repos/${GITHUB_REPOSITORY}/code-scanning/codeql/autofix/settings" \
+            --field enabled=true
