@@ -1,0 +1,11 @@
+name: Security-extended CodeQL configuration
+
+queries:
+  - uses: security-extended
+
+paths-ignore:
+  # These are vendored Bootstrap distributions, not maintained source code.
+  - "UI HELPER/bootstrap.bundle.min.js"
+  - "UI HELPER/bootstrap.min.css"
+  - "demo/**"
+  - "output/**"
