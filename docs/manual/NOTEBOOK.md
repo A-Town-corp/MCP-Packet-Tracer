@@ -63,3 +63,14 @@ network without falling back to arbitrary JavaScript.
 - No project-local `AGENTS.md` or `docs/manual/` precedent existed before this
   manual was created.
 
+### 2026-09-02 — TDD RED
+
+- Baseline command: `python -m pytest -q tests/test_tool_registration.py`
+  returned `2 passed in 0.63s`.
+- RED command:
+  `python -m pytest -q tests/test_tool_registration.py tests/test_upstream_capabilities.py`
+  returned `20 failed in 2.25s`.
+- Intended failure: the registration test listed all 11 adopted names as
+  missing; behavior tests raised `ToolError: Unknown tool` for the same names.
+- Installed MCP package inspected before using its API: `mcp==1.27.2`;
+  `FastMCP.call_tool(name, arguments)` is the exercised public test path.

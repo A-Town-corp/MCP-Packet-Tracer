@@ -22,7 +22,10 @@ EXPECTED = {
     "pt_list_projects", "pt_load_project",
     # live mutation
     "pt_move_device", "pt_delete_device", "pt_rename_device", "pt_delete_link",
-    "pt_add_module", "pt_install_modules_batch", "pt_send_raw",
+    "pt_add_device", "pt_add_link", "pt_add_module", "pt_install_modules_batch",
+    "pt_get_network", "pt_get_device_info", "pt_set_device_power",
+    "pt_set_simulation_mode", "pt_get_simulation_status", "pt_step_simulation",
+    "pt_send_pdu", "pt_get_pdu_results", "pt_get_command_log", "pt_send_raw",
     # ACL / NAT
     "pt_apply_acl", "pt_remove_acl", "pt_apply_nat", "pt_remove_nat",
     # first wave of features
@@ -53,4 +56,4 @@ def test_all_expected_tools_registered():
 
 def test_tool_count_at_least_expected():
     names = _registered_names()
-    assert len(names) >= len(EXPECTED) == 57
+    assert len(names) >= len(EXPECTED) == 68
