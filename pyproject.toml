@@ -38,12 +38,12 @@ classifiers = [
 dependencies = [
     # FastMCP was renamed in MCP 2.x; keep the supported API until migrated.
     "mcp[cli]>=1.0.0,<2.0.0",
-    "pydantic>=2.0.0",
+    "pydantic>=2.13.5",
 ]
 
 [project.optional-dependencies]
 dev = [
-    "pytest>=8.0.0",
+    "pytest>=9.1.1",
 ]
 # Offline .pkt/.pka file-format tools (offline-tools/) need Twofish, which
 # pycryptodome does not provide. Installs identically on macOS and Windows:
