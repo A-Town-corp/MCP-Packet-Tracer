@@ -38,7 +38,7 @@ classifiers = [
 dependencies = [
     # FastMCP was renamed in MCP 2.x; keep the supported API until migrated.
     "mcp[cli]>=1.0.0,<2.0.0",
-    "pydantic>=2.13.5",
+    "pydantic>=2.14.0",
 ]
 
 [project.optional-dependencies]
