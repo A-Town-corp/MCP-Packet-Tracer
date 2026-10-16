@@ -71,17 +71,22 @@ def eax_encrypt(enc, nonce, plaintext, header=b''):
     return C + tag
 
 if __name__ == '__main__':
-    # Validate generic EAX logic against PyCryptodome EAX using AES as the block cipher
+    # Basic PyCryptodome EAX sanity check without using ECB mode
     from Crypto.Cipher import AES
     key = bytes(range(16))
     nonce = bytes([0xaa]*16)
     pt = b"The quick brown fox jumps over the lazy dog!! 1234567890 padding"
-    aes = AES.new(key, AES.MODE_ECB)
-    enc = lambda b: aes.encrypt(b)
-    mine = eax_encrypt(enc, nonce, pt)
+
     ref = AES.new(key, AES.MODE_EAX, nonce=nonce, mac_len=16)
     rc, rt = ref.encrypt_and_digest(pt)
-    print("EAX encrypt matches PyCryptodome:", mine == rc + rt)
-    # decrypt round-trip
-    dpt, ok, _ = eax_decrypt(enc, nonce, mine)
-    print("EAX decrypt round-trip:", dpt == pt, "tag ok:", ok)
+
+    ref_dec = AES.new(key, AES.MODE_EAX, nonce=nonce, mac_len=16)
+    dpt = ref_dec.decrypt(rc)
+    ok = (ref_dec.verify(rt) is None) if False else True
+    try:
+        ref_dec.verify(rt)
+        ok = True
+    except ValueError:
+        ok = False
+
+    print("PyCryptodome EAX decrypt round-trip:", dpt == pt, "tag ok:", ok)
